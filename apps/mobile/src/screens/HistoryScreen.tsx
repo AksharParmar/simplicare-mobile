@@ -1,24 +1,16 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { ScreenNavLinks } from '../components/ScreenNavLinks';
-import { RootStackParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
-import { spacing, typography } from '../theme/tokens';
+import { radius, spacing, typography } from '../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
-
-export function HistoryScreen({ navigation }: Props) {
+export function HistoryScreen() {
   const { state, isLoading } = useAppState();
 
-  const medicationNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    state.medications.forEach((medication) => {
-      map.set(medication.id, medication.name);
-    });
-    return map;
-  }, [state.medications]);
+  const medicationNameById = useMemo(
+    () => new Map(state.medications.map((medication) => [medication.id, medication.name])),
+    [state.medications],
+  );
 
   const logs = useMemo(
     () =>
@@ -35,9 +27,7 @@ export function HistoryScreen({ navigation }: Props) {
 
       {isLoading ? <ActivityIndicator style={styles.loader} /> : null}
 
-      {!isLoading && logs.length === 0 ? (
-        <Text style={styles.empty}>No dose logs yet.</Text>
-      ) : null}
+      {!isLoading && logs.length === 0 ? <Text style={styles.empty}>No dose logs yet.</Text> : null}
 
       {!isLoading
         ? logs.map((log) => (
@@ -46,14 +36,10 @@ export function HistoryScreen({ navigation }: Props) {
                 {medicationNameById.get(log.medicationId) ?? 'Unknown medication'}
               </Text>
               <Text style={styles.cardStatus}>Status: {log.status}</Text>
-              <Text style={styles.cardDate}>
-                Scheduled: {new Date(log.scheduledAt).toLocaleString()}
-              </Text>
+              <Text style={styles.cardDate}>Scheduled: {new Date(log.scheduledAt).toLocaleString()}</Text>
             </View>
           ))
         : null}
-
-      <ScreenNavLinks current="History" navigation={navigation} />
     </ScrollView>
   );
 }
@@ -62,14 +48,17 @@ const styles = StyleSheet.create({
   container: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
+    backgroundColor: '#f8fafc',
   },
   title: {
     fontSize: typography.title,
     fontWeight: '700',
-    marginBottom: spacing.sm,
+    color: '#0f172a',
+    marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: typography.subtitle,
+    color: '#334155',
     marginBottom: spacing.md,
   },
   loader: {
@@ -78,11 +67,13 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: typography.body,
     marginBottom: spacing.md,
+    color: '#64748b',
   },
   card: {
     borderWidth: 1,
-    borderColor: '#d9d9d9',
-    borderRadius: 8,
+    borderColor: '#e2e8f0',
+    borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
     padding: spacing.md,
     marginBottom: spacing.md,
   },
@@ -90,14 +81,16 @@ const styles = StyleSheet.create({
     fontSize: typography.subtitle,
     fontWeight: '600',
     marginBottom: spacing.xs,
+    color: '#0f172a',
   },
   cardStatus: {
     fontSize: typography.body,
     marginBottom: spacing.xs,
     textTransform: 'capitalize',
+    color: '#1e293b',
   },
   cardDate: {
     fontSize: typography.caption,
-    color: '#666666',
+    color: '#64748b',
   },
 });

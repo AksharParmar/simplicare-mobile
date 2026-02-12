@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { rescheduleAllMedicationNotifications } from '../notifications/notificationScheduler';
 import { DoseLog, DoseLogStatus, Medication, Schedule } from '../models';
+import { rescheduleAllMedicationNotifications } from '../notifications/notificationScheduler';
 import {
   addDoseLog as addDoseLogToStore,
   addMedication as addMedicationToStore,
@@ -24,8 +24,8 @@ type AppStateContextValue = {
   state: AppState;
   isLoading: boolean;
   refresh: () => Promise<void>;
-  addMedication: (input: AddMedicationInput) => Promise<void>;
-  addSchedule: (input: AddScheduleInput) => Promise<void>;
+  addMedication: (input: AddMedicationInput) => Promise<Medication>;
+  addSchedule: (input: AddScheduleInput) => Promise<Schedule>;
   addDoseLog: (input: AddDoseLogInput) => Promise<void>;
 };
 
@@ -61,55 +61,51 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     void bootstrap();
   }, []);
 
-  const addMedication = useCallback(
-    async (input: AddMedicationInput) => {
-      const medication: Medication = {
-        id: createId('med'),
-        name: input.name,
-        strength: input.strength,
-        instructions: input.instructions,
-        createdAt: new Date().toISOString(),
-      };
-      const next = await addMedicationToStore(medication);
-      setState(next);
-      await rescheduleAllMedicationNotifications(next);
-    },
-    [],
-  );
+  const addMedication = useCallback(async (input: AddMedicationInput) => {
+    const medication: Medication = {
+      id: createId('med'),
+      name: input.name,
+      strength: input.strength,
+      instructions: input.instructions,
+      createdAt: new Date().toISOString(),
+    };
 
-  const addSchedule = useCallback(
-    async (input: AddScheduleInput) => {
-      const schedule: Schedule = {
-        id: createId('sch'),
-        medicationId: input.medicationId,
-        times: input.times,
-        timezone: input.timezone,
-        startDate: input.startDate,
-        daysOfWeek: input.daysOfWeek,
-        createdAt: new Date().toISOString(),
-      };
-      const next = await addScheduleToStore(schedule);
-      setState(next);
-      await rescheduleAllMedicationNotifications(next);
-    },
-    [],
-  );
+    const next = await addMedicationToStore(medication);
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+    return medication;
+  }, []);
 
-  const addDoseLog = useCallback(
-    async (input: AddDoseLogInput) => {
-      const log: DoseLog = {
-        id: createId('log'),
-        medicationId: input.medicationId,
-        scheduledAt: input.scheduledAt,
-        status: input.status,
-        loggedAt: new Date().toISOString(),
-        note: input.note,
-      };
-      const next = await addDoseLogToStore(log);
-      setState(next);
-    },
-    [],
-  );
+  const addSchedule = useCallback(async (input: AddScheduleInput) => {
+    const schedule: Schedule = {
+      id: createId('sch'),
+      medicationId: input.medicationId,
+      times: input.times,
+      timezone: input.timezone,
+      startDate: input.startDate,
+      daysOfWeek: input.daysOfWeek,
+      createdAt: new Date().toISOString(),
+    };
+
+    const next = await addScheduleToStore(schedule);
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+    return schedule;
+  }, []);
+
+  const addDoseLog = useCallback(async (input: AddDoseLogInput) => {
+    const log: DoseLog = {
+      id: createId('log'),
+      medicationId: input.medicationId,
+      scheduledAt: input.scheduledAt,
+      status: input.status,
+      loggedAt: new Date().toISOString(),
+      note: input.note,
+    };
+
+    const next = await addDoseLogToStore(log);
+    setState(next);
+  }, []);
 
   const value = useMemo(
     () => ({

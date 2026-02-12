@@ -1,10 +1,9 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { DoseActionSheet } from '../components/DoseActionSheet';
-import { ScreenNavLinks } from '../components/ScreenNavLinks';
-import { RootStackParamList } from '../navigation/types';
+import { RootTabParamList } from '../navigation/types';
 import {
   getScheduledNotificationCount,
   scheduleSnoozeNotification,
@@ -14,32 +13,31 @@ import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
 import { getTodayDoseInstances, TodayDoseInstance } from '../utils/todayDoses';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Today'>;
+type Props = BottomTabScreenProps<RootTabParamList, 'Home'>;
 
 type ActiveDose = TodayDoseInstance & {
   instructions?: string;
 };
 
-export function TodayScreen({ navigation, route }: Props) {
+export function TodayScreen({ route, navigation }: Props) {
   const { state, isLoading, addDoseLog, refresh } = useAppState();
   const [submitting, setSubmitting] = useState(false);
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [debugInfo, setDebugInfo] = useState('');
+  const [banner, setBanner] = useState<string | null>(null);
 
-  const medicationById = useMemo(() => {
-    const map = new Map(state.medications.map((medication) => [medication.id, medication]));
-    return map;
-  }, [state.medications]);
-
-  const doses = useMemo(() => getTodayDoseInstances(state, new Date()), [state]);
+  const medicationById = useMemo(
+    () => new Map(state.medications.map((medication) => [medication.id, medication])),
+    [state.medications],
+  );
 
   const dosesWithInstructions = useMemo(
     () =>
-      doses.map((dose) => ({
+      getTodayDoseInstances(state, new Date()).map((dose) => ({
         ...dose,
         instructions: medicationById.get(dose.medicationId)?.instructions,
       })),
-    [doses, medicationById],
+    [state, medicationById],
   );
 
   useEffect(() => {
@@ -59,6 +57,21 @@ export function TodayScreen({ navigation, route }: Props) {
       setSelectedDose(matchingDose);
     }
   }, [route.params?.openedAt, route.params?.reminder, dosesWithInstructions]);
+
+  useEffect(() => {
+    const flashMessage = route.params?.flashMessage;
+    if (!flashMessage) {
+      return;
+    }
+
+    setBanner(flashMessage);
+    const timer = setTimeout(() => {
+      setBanner(null);
+      navigation.setParams({ flashMessage: undefined });
+    }, 1600);
+
+    return () => clearTimeout(timer);
+  }, [route.params?.flashMessage, navigation]);
 
   async function handleLog(status: 'taken' | 'skipped') {
     if (!selectedDose) {
@@ -109,10 +122,12 @@ export function TodayScreen({ navigation, route }: Props) {
       <Text style={styles.title}>Today</Text>
       <Text style={styles.subtitle}>Next doses</Text>
 
+      {banner ? <Text style={styles.banner}>{banner}</Text> : null}
+
       {isLoading ? <ActivityIndicator style={styles.loader} /> : null}
 
       {!isLoading && dosesWithInstructions.length === 0 ? (
-        <Text style={styles.empty}>No doses scheduled for today.</Text>
+        <Text style={styles.empty}>No doses scheduled for today yet.</Text>
       ) : null}
 
       {!isLoading
@@ -132,14 +147,12 @@ export function TodayScreen({ navigation, route }: Props) {
 
       {__DEV__ ? (
         <View style={styles.debugWrap}>
-          <Pressable style={styles.debugButton} onPress={runDebugNotification}>
+          <Pressable style={styles.debugButton} onPress={() => void runDebugNotification()}>
             <Text style={styles.debugText}>Test notification in 1 minute</Text>
           </Pressable>
           {debugInfo ? <Text style={styles.debugInfo}>{debugInfo}</Text> : null}
         </View>
       ) : null}
-
-      <ScreenNavLinks current="Today" navigation={navigation} />
 
       <DoseActionSheet
         visible={Boolean(selectedDose)}
@@ -173,6 +186,18 @@ const styles = StyleSheet.create({
     fontSize: typography.subtitle,
     color: '#334155',
     marginBottom: spacing.md,
+  },
+  banner: {
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    backgroundColor: '#ecfdf5',
+    color: '#065f46',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    fontSize: typography.body,
+    fontWeight: '600',
   },
   loader: {
     marginBottom: spacing.md,

@@ -1,20 +1,38 @@
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
+import { BottomTabBarButtonProps, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { DoseReminderPayload, addDoseReminderResponseListener, getInitialDoseReminderPayload } from './src/notifications/notificationHandlers';
-import { configureNotificationChannel, requestNotificationPermissions } from './src/notifications/notificationScheduler';
-import { RootStackParamList } from './src/navigation/types';
-import { AddMedicationScreen } from './src/screens/AddMedicationScreen';
+import { AddHubActionSheet } from './src/components/AddHubActionSheet';
+import { WelcomeModal } from './src/components/WelcomeModal';
+import { RootStackParamList, RootTabParamList } from './src/navigation/types';
+import {
+  DoseReminderPayload,
+  addDoseReminderResponseListener,
+  getInitialDoseReminderPayload,
+} from './src/notifications/notificationHandlers';
+import {
+  configureNotificationChannel,
+  requestNotificationPermissions,
+} from './src/notifications/notificationScheduler';
 import { CopilotScreen } from './src/screens/CopilotScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
+import { ManualAddMedicationScreen } from './src/screens/ManualAddMedicationScreen';
+import { ScanAddMedicationScreen } from './src/screens/ScanAddMedicationScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppStateProvider } from './src/state/AppStateContext';
-import { hasSeenWelcomeModal, setHasSeenWelcomeModal } from './src/storage/welcomeModalStorage';
-import { WelcomeModal } from './src/components/WelcomeModal';
+import {
+  hasSeenWelcomeModal,
+  setHasSeenWelcomeModal,
+} from './src/storage/welcomeModalStorage';
+import { radius, spacing, typography } from './src/theme/tokens';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -26,17 +44,67 @@ Notifications.setNotificationHandler({
 });
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<RootTabParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+function AddHubPlaceholder() {
+  return <View style={styles.placeholder} />;
+}
+
+function AddHubTabButton({ onPress }: { onPress?: () => void }) {
+  return (
+    <Pressable style={styles.plusButtonWrap} onPress={onPress}>
+      <View style={styles.plusButton}>
+        <Text style={styles.plusText}>+</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: styles.tabLabel,
+      }}
+    >
+      <Tab.Screen name="Home" component={TodayScreen} options={{ tabBarLabel: 'Home' }} />
+      <Tab.Screen name="History" component={HistoryScreen} options={{ tabBarLabel: 'History' }} />
+      <Tab.Screen
+        name="AddHub"
+        component={AddHubPlaceholder}
+        options={{
+          tabBarLabel: '',
+          tabBarButton: () => <AddHubTabButton onPress={onOpenAddHub} />,
+        }}
+        listeners={{
+          tabPress: (event) => {
+            event.preventDefault();
+            onOpenAddHub();
+          },
+        }}
+      />
+      <Tab.Screen name="Copilot" component={CopilotScreen} options={{ tabBarLabel: 'Copilot' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: 'Settings' }} />
+    </Tab.Navigator>
+  );
+}
 
 function AppShell() {
   const [isWelcomeVisible, setIsWelcomeVisible] = useState(false);
+  const [isAddHubVisible, setIsAddHubVisible] = useState(false);
   const [queuedReminder, setQueuedReminder] = useState<DoseReminderPayload | null>(null);
 
   const openDoseReminder = useCallback((payload: DoseReminderPayload) => {
     if (navigationRef.isReady()) {
-      navigationRef.navigate('Today', {
-        reminder: payload,
-        openedAt: Date.now(),
+      navigationRef.navigate('Tabs', {
+        screen: 'Home',
+        params: {
+          reminder: payload,
+          openedAt: Date.now(),
+        },
       });
       return;
     }
@@ -91,8 +159,18 @@ function AppShell() {
     setIsWelcomeVisible(false);
 
     if (navigationRef.isReady()) {
-      navigationRef.navigate('AddMedication');
+      navigationRef.navigate('ManualAddMedication');
     }
+  }
+
+  function handleOpenScan() {
+    setIsAddHubVisible(false);
+    navigationRef.navigate('ScanAddMedication');
+  }
+
+  function handleOpenManual() {
+    setIsAddHubVisible(false);
+    navigationRef.navigate('ManualAddMedication');
   }
 
   return (
@@ -101,27 +179,41 @@ function AppShell() {
         ref={navigationRef}
         onReady={() => {
           if (queuedReminder) {
-            navigationRef.navigate('Today', {
-              reminder: queuedReminder,
-              openedAt: Date.now(),
+            navigationRef.navigate('Tabs', {
+              screen: 'Home',
+              params: {
+                reminder: queuedReminder,
+                openedAt: Date.now(),
+              },
             });
             setQueuedReminder(null);
           }
         }}
       >
         <StatusBar style="dark" />
-        <Stack.Navigator initialRouteName="Today">
-          <Stack.Screen name="Today" component={TodayScreen} />
+        <Stack.Navigator>
+          <Stack.Screen name="Tabs" options={{ headerShown: false }}>
+            {() => <TabsNavigator onOpenAddHub={() => setIsAddHubVisible(true)} />}
+          </Stack.Screen>
           <Stack.Screen
-            name="AddMedication"
-            component={AddMedicationScreen}
+            name="ManualAddMedication"
+            component={ManualAddMedicationScreen}
             options={{ title: 'Add Medication' }}
           />
-          <Stack.Screen name="Copilot" component={CopilotScreen} />
-          <Stack.Screen name="History" component={HistoryScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen
+            name="ScanAddMedication"
+            component={ScanAddMedicationScreen}
+            options={{ title: 'Scan Label' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
+
+      <AddHubActionSheet
+        visible={isAddHubVisible}
+        onClose={() => setIsAddHubVisible(false)}
+        onScanLabel={handleOpenScan}
+        onAddManual={handleOpenManual}
+      />
 
       <WelcomeModal
         visible={isWelcomeVisible}
@@ -139,3 +231,46 @@ export default function App() {
     </AppStateProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  placeholder: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  plusButtonWrap: {
+    top: -16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  plusButton: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  plusText: {
+    color: '#ffffff',
+    fontSize: 34,
+    marginTop: -2,
+    fontWeight: '500',
+  },
+  tabBar: {
+    height: 86,
+    paddingBottom: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+  },
+  tabLabel: {
+    fontSize: typography.caption,
+    fontWeight: '600',
+  },
+});
