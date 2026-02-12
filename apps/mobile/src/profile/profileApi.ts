@@ -91,16 +91,24 @@ export async function updateProfile(
 }
 
 export async function uploadAvatar(
-  userId: string,
   fileUri: string,
   mimeType?: string,
 ): Promise<string> {
   const client = getSupabaseClient();
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+
+  if (!session?.user?.id) {
+    throw new Error('You must be signed in to upload an avatar.');
+  }
+
+  const uid = session.user.id;
 
   const response = await fetch(fileUri);
   const blob = await response.blob();
   const contentType = 'image/jpeg';
-  const avatarPath = `${userId}/avatar.jpg`;
+  const avatarPath = `${uid}/avatar.jpg`;
 
   let { error } = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
     contentType,
@@ -129,6 +137,8 @@ export async function uploadAvatar(
       console.log('[Profile] Avatar upload failed', {
         projectHost,
         bucket: AVATARS_BUCKET,
+        uid,
+        externalCallerUserId: null,
         path: avatarPath,
         contentType,
         suppliedMimeType: mimeType,
@@ -141,6 +151,19 @@ export async function uploadAvatar(
     }
     if (/bucket.*not found/i.test(error.message)) {
       throw new Error("Supabase bucket 'avatars' not found. Create it in Dashboard -> Storage.");
+    }
+    const status = 'status' in error ? (error as { status?: number }).status : undefined;
+    const statusCode = 'statusCode' in error ? (error as { statusCode?: string }).statusCode : undefined;
+    if (
+      status === 401 ||
+      status === 403 ||
+      statusCode === '401' ||
+      statusCode === '403' ||
+      /\b401\b|\b403\b/.test(error.message)
+    ) {
+      throw new Error(
+        "Storage blocked (401/403). Confirm you are signed in and storage policy allows bucket 'avatars' with path '<uid>/...'.",
+      );
     }
     throw new Error(error.message);
   }

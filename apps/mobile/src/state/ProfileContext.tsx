@@ -178,7 +178,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         contentType: 'image/jpeg',
       });
 
-      const avatarPath = await uploadAvatar(user.id, cropResult.uri, cropResult.mimeType);
+      const avatarPath = await uploadAvatar(cropResult.uri, cropResult.mimeType);
       await updateProfile(user.id, { avatarPath });
       await refreshProfile();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
