@@ -1,5 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +15,7 @@ export function MedicationDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { medicationId } = route.params;
   const { state, deleteMedication } = useAppState();
+  const [showScanText, setShowScanText] = useState(false);
 
   const medication = state.medications.find((item) => item.id === medicationId);
   const schedules = state.schedules.filter((schedule) => schedule.medicationId === medicationId);
@@ -79,6 +81,20 @@ export function MedicationDetailScreen({ route, navigation }: Props) {
         </View>
       </View>
 
+      {medication.scanText ? (
+        <View style={styles.sectionCard}>
+          <Pressable style={styles.scanHeader} onPress={() => setShowScanText((prev) => !prev)}>
+            <Text style={styles.sectionTitle}>Label text</Text>
+            <Text style={styles.scanChevron}>{showScanText ? '−' : '+'}</Text>
+          </Pressable>
+          <Text style={styles.scanMeta}>
+            Source: {medication.scanSource ?? 'unknown'}
+            {medication.scanCapturedAt ? ` • ${new Date(medication.scanCapturedAt).toLocaleDateString()}` : ''}
+          </Text>
+          {showScanText ? <Text style={styles.scanText}>{medication.scanText}</Text> : null}
+        </View>
+      ) : null}
+
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>History</Text>
         {logs.length === 0 ? (
@@ -93,10 +109,7 @@ export function MedicationDetailScreen({ route, navigation }: Props) {
         )}
       </View>
 
-      <Pressable
-        style={styles.primaryButton}
-        onPress={() => navigation.navigate('EditMedication', { medicationId })}
-      >
+      <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('EditMedication', { medicationId })}>
         <Text style={styles.primaryButtonText}>Edit medication</Text>
       </Pressable>
 
@@ -172,6 +185,26 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#334155',
     fontWeight: '600',
+  },
+  scanHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scanChevron: {
+    fontSize: typography.subtitle,
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  scanMeta: {
+    fontSize: typography.caption,
+    color: '#64748b',
+    marginBottom: spacing.xs,
+  },
+  scanText: {
+    fontSize: typography.caption,
+    color: '#334155',
+    lineHeight: 20,
   },
   logRow: {
     borderWidth: 1,

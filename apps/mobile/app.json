@@ -17,7 +17,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.akshar.simplicare"
+      "bundleIdentifier": "com.akshar.simplicare",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.akshar.simplicare",
@@ -30,6 +33,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2f5157a0-4d73-4980-a3c2-466053d73020"
+      }
     }
   }
 }

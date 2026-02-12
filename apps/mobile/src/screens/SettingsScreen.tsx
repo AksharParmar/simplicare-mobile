@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { useMemo, useState } from 'react';
 import {
@@ -19,6 +21,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PasteOcrTextModal } from '../components/PasteOcrTextModal';
+import { RootStackParamList } from '../navigation/types';
 import {
   cancelAllMedicationNotifications,
   getScheduledNotificationCount,
@@ -34,14 +38,19 @@ import { radius, spacing, typography } from '../theme/tokens';
 
 const SNOOZE_OPTIONS: Array<5 | 10 | 15> = [5, 10, 15];
 
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
   const { state, resetState } = useAppState();
   const { prefs, updatePrefs } = usePreferences();
 
   const [isNameModalVisible, setIsNameModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState(prefs.displayName);
   const [devMessage, setDevMessage] = useState<string | null>(null);
+  const [isPasteModalVisible, setIsPasteModalVisible] = useState(false);
+  const [devPastedText, setDevPastedText] = useState('');
 
   const appVersion = useMemo(() => Constants.expoConfig?.version ?? '1.0.0', []);
 
@@ -130,6 +139,19 @@ export function SettingsScreen() {
     setDevMessage(`Test reminder scheduled. Total scheduled: ${scheduledCount}`);
   }
 
+  function handleUseDevText(text: string) {
+    const value = text.trim();
+    setDevPastedText(value);
+    if (!value) {
+      return;
+    }
+
+    navigation.navigate('ConfirmScanMedication', {
+      rawText: value,
+      source: 'pasted',
+    });
+  }
+
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.title}>Settings</Text>
@@ -200,6 +222,8 @@ export function SettingsScreen() {
             thumbColor={prefs.saveScanTextLocally ? '#2563eb' : '#ffffff'}
           />
         </View>
+        <Text style={styles.helperText}>When off, scan text is used only to fill the form and then discarded.</Text>
+
         <Pressable style={styles.row} onPress={() => void handleExportData()}>
           <Text style={styles.rowLabel}>Export my data</Text>
           <Text style={styles.chevron}>›</Text>
@@ -224,19 +248,22 @@ export function SettingsScreen() {
           <Text style={styles.rowLabel}>Version</Text>
           <Text style={styles.rowValue}>{appVersion}</Text>
         </View>
-        <Text style={styles.aboutText}>
-          SimpliCare keeps medication management local-first and privacy friendly.
-        </Text>
+        <Text style={styles.aboutText}>SimpliCare keeps medication management local-first and privacy friendly.</Text>
       </View>
 
       {__DEV__ ? (
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Developer</Text>
+          <Pressable style={styles.row} onPress={() => setIsPasteModalVisible(true)}>
+            <Text style={styles.rowLabel}>Paste OCR text (Dev)</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
           <Pressable style={styles.row} onPress={() => void handleTestNotification()}>
             <Text style={styles.rowLabel}>Test notification in 1 minute</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
-          <Text style={styles.devHelper}>Developer tool</Text>
+          <Text style={styles.devHelper}>Developer tools</Text>
+          {devPastedText ? <Text style={styles.devMessage}>Loaded OCR text ({devPastedText.length} chars)</Text> : null}
           {devMessage ? <Text style={styles.devMessage}>{devMessage}</Text> : null}
         </View>
       ) : null}
@@ -254,105 +281,123 @@ export function SettingsScreen() {
             keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
           >
             <Pressable style={styles.modalBackdrop} onPress={() => setIsNameModalVisible(false)}>
-              <Pressable style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, spacing.sm) }]} onPress={() => undefined}>
+              <Pressable
+                style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, spacing.sm) }]}
+                onPress={() => undefined}
+              >
                 <Text style={styles.modalTitle}>Display name</Text>
                 <TextInput
                   value={nameInput}
                   onChangeText={setNameInput}
-                  placeholder="Enter your name"
-                  style={styles.input}
+                  placeholder="Your name"
+                  style={styles.modalInput}
                   autoCapitalize="words"
                   returnKeyType="done"
-                  onSubmitEditing={() => void saveName()}
                 />
-                <Pressable style={styles.primaryButton} onPress={() => void saveName()}>
-                  <Text style={styles.primaryButtonText}>Save</Text>
-                </Pressable>
-                <Pressable style={styles.secondaryButton} onPress={() => setIsNameModalVisible(false)}>
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
-                </Pressable>
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.modalSecondaryButton} onPress={() => setIsNameModalVisible(false)}>
+                    <Text style={styles.modalSecondaryText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={styles.modalPrimaryButton} onPress={() => void saveName()}>
+                    <Text style={styles.modalPrimaryText}>Save</Text>
+                  </Pressable>
+                </View>
               </Pressable>
             </Pressable>
           </KeyboardAvoidingView>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <PasteOcrTextModal
+        visible={isPasteModalVisible}
+        initialText={devPastedText}
+        title="Paste OCR text (Dev)"
+        onUseText={handleUseDevText}
+        onClose={() => setIsPasteModalVisible(false)}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: '#f8fafc',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xl,
-    backgroundColor: '#f8fafc',
+    gap: spacing.md,
   },
   title: {
     fontSize: typography.title,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: spacing.md,
   },
   sectionCard: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
     backgroundColor: '#ffffff',
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
   sectionTitle: {
-    fontSize: typography.body,
+    fontSize: typography.subtitle,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: spacing.sm,
   },
   row: {
-    minHeight: 50,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f7',
+    paddingTop: spacing.sm,
   },
   rowStatic: {
-    minHeight: 46,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f7',
+    paddingTop: spacing.sm,
   },
   rowLabel: {
     fontSize: typography.body,
-    color: '#0f172a',
+    color: '#334155',
+    fontWeight: '600',
   },
   rowRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs,
   },
   rowValue: {
-    fontSize: typography.caption,
+    fontSize: typography.body,
     color: '#64748b',
-    marginRight: spacing.xs,
   },
   chevron: {
-    fontSize: 24,
+    fontSize: 20,
     color: '#94a3b8',
-    marginTop: -2,
-  },
-  destructiveLabel: {
-    color: '#b91c1c',
+    marginTop: -1,
   },
   snoozeWrap: {
-    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f7',
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
   },
   segmentedWrap: {
     flexDirection: 'row',
-    marginTop: spacing.xs,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: '#dbe2ea',
-    borderRadius: radius.md,
     overflow: 'hidden',
   },
   segmentedItem: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
@@ -361,28 +406,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
   },
   segmentedLabel: {
+    color: '#475569',
     fontSize: typography.caption,
-    color: '#334155',
-    fontWeight: '700',
+    fontWeight: '600',
   },
   segmentedLabelActive: {
     color: '#ffffff',
   },
-  devHelper: {
+  helperText: {
     fontSize: typography.caption,
     color: '#64748b',
-    marginTop: spacing.xs,
   },
-  devMessage: {
-    fontSize: typography.caption,
-    color: '#334155',
-    marginTop: spacing.xs,
+  destructiveLabel: {
+    color: '#b91c1c',
   },
   aboutText: {
     fontSize: typography.caption,
     color: '#64748b',
-    marginTop: spacing.xs,
-    lineHeight: 20,
+    lineHeight: 18,
+  },
+  devHelper: {
+    fontSize: typography.caption,
+    color: '#64748b',
+  },
+  devMessage: {
+    fontSize: typography.caption,
+    color: '#334155',
   },
   modalAvoiding: {
     flex: 1,
@@ -390,57 +439,60 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.2)',
+    backgroundColor: 'rgba(15, 23, 42, 0.24)',
     padding: spacing.lg,
   },
   modalCard: {
-    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#dbe2ea',
+    borderRadius: radius.lg,
     backgroundColor: '#ffffff',
     padding: spacing.md,
+    gap: spacing.sm,
   },
   modalTitle: {
     fontSize: typography.subtitle,
-    fontWeight: '700',
     color: '#0f172a',
-    marginBottom: spacing.sm,
+    fontWeight: '700',
   },
-  input: {
-    minHeight: 52,
+  modalInput: {
+    minHeight: 48,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: '#dbe2ea',
-    paddingHorizontal: spacing.md,
-    fontSize: typography.body,
-    color: '#0f172a',
     backgroundColor: '#ffffff',
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    color: '#0f172a',
+    fontSize: typography.body,
   },
-  primaryButton: {
-    minHeight: 52,
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSecondaryText: {
+    color: '#334155',
+    fontSize: typography.body,
+    fontWeight: '600',
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
     borderRadius: radius.md,
     backgroundColor: '#0f172a',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
   },
-  primaryButtonText: {
+  modalPrimaryText: {
     color: '#ffffff',
-    fontSize: typography.body,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    minHeight: 50,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-  },
-  secondaryButtonText: {
-    color: '#334155',
     fontSize: typography.body,
     fontWeight: '600',
   },

@@ -29,11 +29,10 @@ export type RootStackParamList = {
   Tabs: NavigatorScreenParams<RootTabParamList> | undefined;
   ManualAddMedication: undefined;
   ScanAddMedication: undefined;
-  ConfirmScannedMedication: {
+  ConfirmScanMedication: {
     imageUri?: string;
     rawText: string;
-    ocrLines?: string[];
-    ocrError?: string;
+    source: 'pasted' | 'ocr';
   };
   MedicationDetail: {
     medicationId: string;

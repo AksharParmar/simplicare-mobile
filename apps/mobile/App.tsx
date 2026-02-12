@@ -24,7 +24,7 @@ import {
   configureNotificationChannel,
   requestNotificationPermissions,
 } from './src/notifications/notificationScheduler';
-import { ConfirmScannedMedicationScreen } from './src/screens/ConfirmScannedMedicationScreen';
+import { ConfirmScanMedicationScreen } from './src/screens/ConfirmScanMedicationScreen';
 import { CopilotScreen } from './src/screens/CopilotScreen';
 import { EditMedicationScreen } from './src/screens/EditMedicationScreen';
 import { ManualAddMedicationScreen } from './src/screens/ManualAddMedicationScreen';
@@ -240,8 +240,8 @@ function AppShell() {
             options={{ title: 'Scan Label' }}
           />
           <Stack.Screen
-            name="ConfirmScannedMedication"
-            component={ConfirmScannedMedicationScreen}
+            name="ConfirmScanMedication"
+            component={ConfirmScanMedicationScreen}
             options={{ title: 'Confirm Scan' }}
           />
           <Stack.Screen

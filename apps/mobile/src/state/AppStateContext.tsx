@@ -79,6 +79,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       name: input.name,
       strength: input.strength,
       instructions: input.instructions,
+      scanText: input.scanText,
+      scanSource: input.scanSource,
+      scanCapturedAt: input.scanCapturedAt,
       createdAt: new Date().toISOString(),
     };
 

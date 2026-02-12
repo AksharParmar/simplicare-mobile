@@ -4,103 +4,189 @@ export type LabelExtractResult = {
   nameCandidate?: string;
   strengthCandidate?: string;
   instructionsCandidate?: string;
-  timesSuggested: string[];
   confidence: {
     name: ConfidenceLevel;
     strength: ConfidenceLevel;
     instructions: ConfidenceLevel;
   };
+  cleanedText: string;
 };
 
-const STRENGTH_REGEX = /\b\d+(?:\.\d+)?\s?(?:mg|mcg|g|ml|mL|IU)\b/i;
-const INSTRUCTIONS_REGEX =
-  /\b(take|once|twice|daily|every|by mouth|with food|at bedtime)\b/i;
-const EXCLUDED_NAME_WORDS =
-  /\b(tablets?|capsules?|rx only|ndc|lot|exp|qty|refill|directions?)\b/i;
+const NOISE_KEYWORDS = [
+  'RX ONLY',
+  'NDC',
+  'LOT',
+  'EXP',
+  'REFILL',
+  'PRESCRIBED',
+  'TABLETS',
+  'CAPSULES',
+  'DIRECTIONS',
+  'WARNING',
+  'KEEP OUT',
+  'STORE',
+  'MFG',
+  'PHARMACY',
+];
 
-function normalizeLines(rawText: string): string[] {
-  return rawText
+const INSTRUCTION_HINTS = [
+  'take',
+  'once',
+  'daily',
+  'twice',
+  'every',
+  'by mouth',
+  'with food',
+  'at bedtime',
+  'as needed',
+];
+
+const STRENGTH_PATTERN = /\b\d+(?:\.\d+)?\s?(?:mg|mcg|g|ml|mL|IU)\b/gi;
+
+function cleanLine(line: string): string {
+  return line.replace(/\s+/g, ' ').trim();
+}
+
+function splitLines(text: string): string[] {
+  return text
     .split(/\r?\n/)
-    .map((line) => line.trim().replace(/\s+/g, ' '))
+    .map(cleanLine)
     .filter(Boolean);
 }
 
-function selectStrength(rawText: string): { value?: string; confidence: ConfidenceLevel } {
-  const match = rawText.match(STRENGTH_REGEX)?.[0];
-  if (!match) {
-    return { confidence: 'low' };
+function scoreNameLine(line: string): number {
+  const upper = line.toUpperCase();
+  const tokenCount = line.split(/\s+/).length;
+
+  let score = 0;
+
+  if (tokenCount >= 1 && tokenCount <= 4) {
+    score += 3;
   }
 
-  return { value: match, confidence: 'high' };
+  if (line.length >= 3 && line.length <= 40) {
+    score += 2;
+  }
+
+  if (/^[A-Za-z][A-Za-z0-9\-\s]+$/.test(line)) {
+    score += 2;
+  }
+
+  if (/^[A-Z][a-z]/.test(line)) {
+    score += 2;
+  }
+
+  if (/\d/.test(line)) {
+    score -= 2;
+  }
+
+  if (NOISE_KEYWORDS.some((keyword) => upper.includes(keyword))) {
+    score -= 6;
+  }
+
+  return score;
 }
 
-function selectName(lines: string[]): { value?: string; confidence: ConfidenceLevel } {
+function getNameCandidate(lines: string[]): { value?: string; confidence: ConfidenceLevel } {
   if (lines.length === 0) {
     return { confidence: 'low' };
   }
 
-  const primary = lines.slice(0, 3).find((line) => !EXCLUDED_NAME_WORDS.test(line));
-  if (!primary) {
-    return { confidence: 'low' };
-  }
+  const scored = lines.map((line, index) => ({ line, score: scoreNameLine(line), index }));
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
 
-  const cleaned = primary.replace(STRENGTH_REGEX, '').trim();
-  if (!cleaned) {
-    return { confidence: 'low' };
-  }
+  const best = scored[0];
+  const second = scored[1];
 
-  if (cleaned.length <= 2) {
-    return { value: cleaned, confidence: 'low' };
-  }
-
-  return { value: cleaned, confidence: lines[0] === primary ? 'high' : 'med' };
-}
-
-function selectInstructions(lines: string[]): { value?: string; confidence: ConfidenceLevel } {
-  const matched = lines.find((line) => INSTRUCTIONS_REGEX.test(line));
-  if (!matched) {
+  if (!best || best.score <= 0) {
     return { confidence: 'low' };
   }
 
   const confidence: ConfidenceLevel =
-    /\b(twice daily|once daily|every\s+\d+\s+hours)\b/i.test(matched) ? 'high' : 'med';
+    best.score >= 6 && (!second || best.score - second.score >= 2) ? 'high' : 'med';
 
-  return { value: matched, confidence };
+  return {
+    value: best.line.replace(STRENGTH_PATTERN, '').trim() || best.line,
+    confidence,
+  };
 }
 
-function suggestTimes(rawText: string): string[] {
-  const source = rawText.toLowerCase();
+function getStrengthCandidate(lines: string[]): { value?: string; confidence: ConfidenceLevel } {
+  const allMatches: Array<{ value: string; lineIndex: number }> = [];
 
-  if (
-    source.includes('twice daily') ||
-    source.includes('2 times daily') ||
-    source.includes('every 12 hours')
-  ) {
-    return ['08:00', '20:00'];
+  lines.forEach((line, lineIndex) => {
+    const matches = line.match(STRENGTH_PATTERN);
+    if (!matches) {
+      return;
+    }
+
+    matches.forEach((match) => {
+      allMatches.push({ value: match.trim(), lineIndex });
+    });
+  });
+
+  if (allMatches.length === 0) {
+    return { confidence: 'low' };
   }
 
-  if (source.includes('once daily') || source.includes('once a day') || source.includes('daily')) {
-    return ['09:00'];
+  if (allMatches.length > 1) {
+    return { value: allMatches[0].value, confidence: 'low' };
   }
 
-  return [];
+  const match = allMatches[0];
+  const nearbyName = match.lineIndex <= 2;
+
+  return {
+    value: match.value,
+    confidence: nearbyName ? 'high' : 'med',
+  };
 }
 
-export function extractLabelFields(rawText: string): LabelExtractResult {
-  const lines = normalizeLines(rawText);
-  const name = selectName(lines);
-  const strength = selectStrength(rawText);
-  const instructions = selectInstructions(lines);
+function getInstructionsCandidate(lines: string[]): { value?: string; confidence: ConfidenceLevel } {
+  const match = lines.find((line) => {
+    const lower = line.toLowerCase();
+    return INSTRUCTION_HINTS.some((keyword) => lower.includes(keyword));
+  });
+
+  if (!match) {
+    return { confidence: 'low' };
+  }
+
+  const lower = match.toLowerCase();
+  const hasTake = lower.includes('take');
+  const hasFrequency = /\b(once|twice|daily|every)\b/.test(lower);
+
+  const confidence: ConfidenceLevel = hasTake && hasFrequency ? 'high' : 'med';
+
+  return { value: match, confidence };
+}
+
+export function normalizeOcrText(raw: string): string {
+  return raw
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(cleanLine)
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function extractLabelCandidates(rawText: string): LabelExtractResult {
+  const cleanedText = normalizeOcrText(rawText);
+  const lines = splitLines(cleanedText);
+
+  const name = getNameCandidate(lines);
+  const strength = getStrengthCandidate(lines);
+  const instructions = getInstructionsCandidate(lines);
 
   return {
     nameCandidate: name.value,
     strengthCandidate: strength.value,
     instructionsCandidate: instructions.value,
-    timesSuggested: suggestTimes(rawText),
     confidence: {
       name: name.confidence,
       strength: strength.confidence,
       instructions: instructions.confidence,
     },
+    cleanedText,
   };
 }

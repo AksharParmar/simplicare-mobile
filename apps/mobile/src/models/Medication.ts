@@ -3,5 +3,8 @@ export type Medication = {
   name: string;
   strength?: string;
   instructions?: string;
+  scanText?: string;
+  scanSource?: 'pasted' | 'ocr';
+  scanCapturedAt?: string;
   createdAt: string;
 };
