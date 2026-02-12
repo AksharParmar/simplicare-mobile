@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   ActivityIndicator,
+  Image,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -16,10 +17,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdherenceRing } from '../components/AdherenceRing';
 import { DoseActionSheet } from '../components/DoseActionSheet';
+import { ProfileMenuPopup } from '../components/ProfileMenuPopup';
 import { RootTabParamList } from '../navigation/types';
 import { scheduleSnoozeNotification } from '../notifications/notificationScheduler';
+import { useAuth } from '../state/AuthContext';
 import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
+import { useProfile } from '../state/ProfileContext';
 import { scopeKey } from '../storage/scope';
 import { radius, spacing, typography } from '../theme/tokens';
 import { get7DayStats, getDayStats, getStreakDays } from '../utils/adherence';
@@ -55,14 +59,18 @@ function formatRelativeTime(scheduledAtISO: string, now: Date): string {
 
 export function TodayScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { isGuest } = useAuth();
   const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh, currentScope } = useAppState();
+  const { profile, setAvatarFromPicker } = useProfile();
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const now = new Date();
-  const greeting = prefs.displayName.trim() ? `Hi, ${prefs.displayName.trim()}` : 'Hi there';
+  const profileName = profile?.displayName?.trim() || (isGuest ? 'Guest' : '');
+  const greeting = profileName ? `Hi, ${profileName}` : 'Hi there';
   const hasAnyMedication = state.medications.length > 0;
   const hasAnySchedule = state.schedules.length > 0;
 
@@ -209,8 +217,21 @@ export function TodayScreen({ route, navigation }: Props) {
     <ScrollView
       contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
     >
-      <Text style={styles.greeting}>{greeting}</Text>
-      <Text style={styles.title}>Today</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.headerTextWrap}>
+          <Text style={styles.greeting}>{greeting}</Text>
+          <Text style={styles.title}>Today</Text>
+        </View>
+        <Pressable style={styles.avatarButton} onPress={() => setShowProfileMenu(true)}>
+          {profile?.avatarUrl ? (
+            <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarInitial}>
+              {(profileName || 'G').slice(0, 1).toUpperCase()}
+            </Text>
+          )}
+        </Pressable>
+      </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
 
@@ -372,6 +393,19 @@ export function TodayScreen({ route, navigation }: Props) {
         onSkip={() => void handleSheetLog('skipped')}
         onSnooze={() => void handleSnooze()}
       />
+      <ProfileMenuPopup
+        visible={showProfileMenu}
+        isGuest={isGuest}
+        onClose={() => setShowProfileMenu(false)}
+        onEditPhoto={() => {
+          setShowProfileMenu(false);
+          void setAvatarFromPicker();
+        }}
+        onAccountSettings={() => {
+          setShowProfileMenu(false);
+          navigation.navigate('Settings');
+        }}
+      />
     </ScrollView>
   );
 }
@@ -392,6 +426,34 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
     marginBottom: spacing.md,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTextWrap: {
+    flex: 1,
+  },
+  avatarButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarInitial: {
+    fontSize: typography.body,
+    color: '#334155',
+    fontWeight: '700',
   },
   banner: {
     borderWidth: 1,

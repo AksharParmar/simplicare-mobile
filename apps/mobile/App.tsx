@@ -38,6 +38,7 @@ import { AppStateProvider } from './src/state/AppStateContext';
 import { useAppState } from './src/state/AppStateContext';
 import { AuthProvider, useAuth } from './src/state/AuthContext';
 import { PreferencesProvider } from './src/state/PreferencesContext';
+import { ProfileProvider } from './src/state/ProfileContext';
 import { scopeKey } from './src/storage/scope';
 import { hasSeenTutorial, setHasSeenTutorial } from './src/storage/tutorialStore';
 import { spacing, typography } from './src/theme/tokens';
@@ -327,9 +328,11 @@ export default function App() {
       <SafeAreaProvider>
         <PreferencesProvider>
           <AuthProvider>
-            <AppStateProvider>
-              <AppShell />
-            </AppStateProvider>
+            <ProfileProvider>
+              <AppStateProvider>
+                <AppShell />
+              </AppStateProvider>
+            </ProfileProvider>
           </AuthProvider>
         </PreferencesProvider>
       </SafeAreaProvider>
