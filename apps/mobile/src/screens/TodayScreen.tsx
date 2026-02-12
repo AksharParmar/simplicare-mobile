@@ -10,6 +10,7 @@ import {
   scheduleSnoozeNotification,
   scheduleTestNotificationInOneMinute,
 } from '../notifications/notificationScheduler';
+import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
 import {
@@ -28,11 +29,14 @@ type ActiveDose = TodayDoseInstance & {
 
 export function TodayScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh } = useAppState();
   const [submitting, setSubmitting] = useState(false);
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [debugInfo, setDebugInfo] = useState('');
   const [banner, setBanner] = useState<string | null>(null);
+
+  const greeting = prefs.displayName.trim() ? `Hi, ${prefs.displayName.trim()}` : 'Hi there';
 
   const medicationById = useMemo(
     () => new Map(state.medications.map((medication) => [medication.id, medication])),
@@ -143,6 +147,7 @@ export function TodayScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
+      <Text style={styles.greeting}>{greeting}</Text>
       <Text style={styles.title}>Today</Text>
       <Text style={styles.subtitle}>Next doses</Text>
 
@@ -215,6 +220,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xl,
     backgroundColor: '#f8fafc',
+  },
+  greeting: {
+    fontSize: typography.body,
+    color: '#64748b',
+    marginBottom: spacing.xs,
   },
   title: {
     fontSize: typography.title,
