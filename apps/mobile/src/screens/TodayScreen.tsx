@@ -20,6 +20,7 @@ import { RootTabParamList } from '../navigation/types';
 import { scheduleSnoozeNotification } from '../notifications/notificationScheduler';
 import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
+import { scopeKey } from '../storage/scope';
 import { radius, spacing, typography } from '../theme/tokens';
 import { get7DayStats, getDayStats, getStreakDays } from '../utils/adherence';
 import { formatHHMMTo12Hour, formatISOTo12Hour } from '../utils/timeFormat';
@@ -55,7 +56,7 @@ function formatRelativeTime(scheduledAtISO: string, now: Date): string {
 export function TodayScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { prefs } = usePreferences();
-  const { state, isLoading, addDoseLog, refresh } = useAppState();
+  const { state, isLoading, addDoseLog, refresh, currentScope } = useAppState();
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -127,6 +128,11 @@ export function TodayScreen({ route, navigation }: Props) {
       return;
     }
 
+    const reminderScope = reminder.scope;
+    if (reminderScope && reminderScope !== scopeKey(currentScope)) {
+      return;
+    }
+
     const matched = remainingTodayDoses.find(
       (dose) =>
         dose.medicationId === reminder.medicationId &&
@@ -136,7 +142,7 @@ export function TodayScreen({ route, navigation }: Props) {
     if (matched) {
       setSelectedDose(matched);
     }
-  }, [route.params?.openedAt, route.params?.reminder, remainingTodayDoses]);
+  }, [route.params?.openedAt, route.params?.reminder, remainingTodayDoses, currentScope]);
 
   useEffect(() => {
     const flashMessage = route.params?.flashMessage;
@@ -185,6 +191,7 @@ export function TodayScreen({ route, navigation }: Props) {
     setSubmitting(true);
     try {
       await scheduleSnoozeNotification({
+        scope: currentScope,
         medicationId: selectedDose.medicationId,
         medicationName: selectedDose.medicationName,
         strength: selectedDose.strength,

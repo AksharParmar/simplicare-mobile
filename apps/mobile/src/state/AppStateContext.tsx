@@ -1,20 +1,22 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DoseLog, DoseLogStatus, Medication, Schedule } from '../models';
-import { rescheduleAllMedicationNotifications } from '../notifications/notificationScheduler';
+import { switchNotificationScope, rescheduleAllMedicationNotifications } from '../notifications/notificationScheduler';
+import { useAuth } from './AuthContext';
 import {
   addDoseLog as addDoseLogToStore,
   addMedication as addMedicationToStore,
   addSchedule as addScheduleToStore,
   AppState,
+  clearState as clearStateInStore,
   deleteMedication as deleteMedicationInStore,
   deleteSchedule as deleteScheduleInStore,
   loadState,
   seedIfEmpty,
-  clearState as clearStateInStore,
   updateMedication as updateMedicationInStore,
   updateSchedule as updateScheduleInStore,
 } from '../storage/localStore';
+import { scopeKey, StorageScope } from '../storage/scope';
 
 type AddMedicationInput = Omit<Medication, 'id' | 'createdAt'>;
 type AddScheduleInput = Omit<Schedule, 'id' | 'createdAt'>;
@@ -30,6 +32,8 @@ type AddDoseLogInput = {
 type AppStateContextValue = {
   state: AppState;
   isLoading: boolean;
+  currentScope: StorageScope;
+  currentScopeKey: string;
   refresh: () => Promise<void>;
   addMedication: (input: AddMedicationInput) => Promise<Medication>;
   addSchedule: (input: AddScheduleInput) => Promise<Schedule>;
@@ -54,24 +58,57 @@ function createId(prefix: string): string {
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const { activeScope } = useAuth();
+
   const [state, setState] = useState<AppState>(EMPTY_STATE);
   const [isLoading, setIsLoading] = useState(true);
 
+  const currentScopeRef = useRef<StorageScope>(activeScope);
+  const previousScopeRef = useRef<StorageScope | null>(null);
+  const scopeLoadVersionRef = useRef(0);
+
+  const currentScopeKey = scopeKey(activeScope);
+
   const refresh = useCallback(async () => {
-    const nextState = await loadState();
+    const nextState = await loadState(currentScopeRef.current);
     setState(nextState);
   }, []);
 
   useEffect(() => {
-    async function bootstrap() {
-      const seeded = await seedIfEmpty();
+    currentScopeRef.current = activeScope;
+  }, [activeScope]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadVersion = ++scopeLoadVersionRef.current;
+
+    async function bootstrapForScope() {
+      setIsLoading(true);
+      setState(EMPTY_STATE);
+
+      const seeded = await seedIfEmpty(activeScope);
+
+      if (cancelled || loadVersion !== scopeLoadVersionRef.current) {
+        return;
+      }
+
+      await switchNotificationScope(previousScopeRef.current, activeScope, seeded);
+
+      if (cancelled || loadVersion !== scopeLoadVersionRef.current) {
+        return;
+      }
+
       setState(seeded);
-      await rescheduleAllMedicationNotifications(seeded);
       setIsLoading(false);
+      previousScopeRef.current = activeScope;
     }
 
-    void bootstrap();
-  }, []);
+    void bootstrapForScope();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeScope]);
 
   const addMedication = useCallback(async (input: AddMedicationInput) => {
     const medication: Medication = {
@@ -85,9 +122,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    const next = await addMedicationToStore(medication);
+    const scope = currentScopeRef.current;
+    const next = await addMedicationToStore(scope, medication);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
     return medication;
   }, []);
 
@@ -102,9 +140,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    const next = await addScheduleToStore(schedule);
+    const scope = currentScopeRef.current;
+    const next = await addScheduleToStore(scope, schedule);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
     return schedule;
   }, []);
 
@@ -118,46 +157,54 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       note: input.note,
     };
 
-    const next = await addDoseLogToStore(log);
+    const scope = currentScopeRef.current;
+    const next = await addDoseLogToStore(scope, log);
     setState(next);
   }, []);
 
   const updateMedication = useCallback(async (id: string, patch: UpdateMedicationInput) => {
-    const next = await updateMedicationInStore(id, patch);
+    const scope = currentScopeRef.current;
+    const next = await updateMedicationInStore(scope, id, patch);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
     return next.medications.find((medication) => medication.id === id) ?? null;
   }, []);
 
   const updateSchedule = useCallback(async (id: string, patch: UpdateScheduleInput) => {
-    const next = await updateScheduleInStore(id, patch);
+    const scope = currentScopeRef.current;
+    const next = await updateScheduleInStore(scope, id, patch);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
     return next.schedules.find((schedule) => schedule.id === id) ?? null;
   }, []);
 
   const deleteMedication = useCallback(async (id: string) => {
-    const next = await deleteMedicationInStore(id);
+    const scope = currentScopeRef.current;
+    const next = await deleteMedicationInStore(scope, id);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
   }, []);
 
   const deleteSchedule = useCallback(async (id: string) => {
-    const next = await deleteScheduleInStore(id);
+    const scope = currentScopeRef.current;
+    const next = await deleteScheduleInStore(scope, id);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
   }, []);
 
   const resetState = useCallback(async () => {
-    const next = await clearStateInStore();
+    const scope = currentScopeRef.current;
+    const next = await clearStateInStore(scope);
     setState(next);
-    await rescheduleAllMedicationNotifications(next);
+    await rescheduleAllMedicationNotifications(scope, next);
   }, []);
 
   const value = useMemo(
     () => ({
       state,
       isLoading,
+      currentScope: activeScope,
+      currentScopeKey,
       refresh,
       addMedication,
       addSchedule,
@@ -171,6 +218,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [
       state,
       isLoading,
+      activeScope,
+      currentScopeKey,
       refresh,
       addMedication,
       addSchedule,

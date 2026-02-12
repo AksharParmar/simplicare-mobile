@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 
 export type DoseReminderPayload = {
   type: 'doseReminder';
+  scope?: string;
   medicationId: string;
   scheduleId: string;
   timeHHMM: string;
@@ -21,6 +22,7 @@ function toDoseReminderPayload(data: unknown): DoseReminderPayload | null {
   ) {
     return {
       type: 'doseReminder',
+      scope: typeof candidate.scope === 'string' ? candidate.scope : undefined,
       medicationId: candidate.medicationId,
       scheduleId: candidate.scheduleId,
       timeHHMM: candidate.timeHHMM,

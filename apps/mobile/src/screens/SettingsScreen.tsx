@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PasteOcrTextModal } from '../components/PasteOcrTextModal';
 import { RootStackParamList } from '../navigation/types';
 import {
+  cancelMedicationNotificationsForScope,
   cancelAllMedicationNotifications,
   getScheduledNotificationCount,
   rescheduleAllMedicationNotifications,
@@ -32,7 +33,7 @@ import {
 import { useAppState } from '../state/AppStateContext';
 import { useAuth } from '../state/AuthContext';
 import { usePreferences } from '../state/PreferencesContext';
-import { STORE_KEY } from '../storage/localStore';
+import { clearAllScopedData } from '../storage/localStore';
 import { PREFS_KEY } from '../storage/preferencesStore';
 import { resetTutorialFlag, TUTORIAL_SEEN_KEY } from '../storage/tutorialStore';
 import { radius, spacing, typography } from '../theme/tokens';
@@ -44,7 +45,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
-  const { state, resetState } = useAppState();
+  const { state, resetState, currentScope } = useAppState();
   const { isGuest, session, logout, exitGuest } = useAuth();
   const { prefs, updatePrefs } = usePreferences();
 
@@ -70,11 +71,11 @@ export function SettingsScreen() {
     await updatePrefs({ remindersEnabled: next });
 
     if (next) {
-      await rescheduleAllMedicationNotifications(state);
+      await rescheduleAllMedicationNotifications(currentScope, state);
       return;
     }
 
-    await cancelAllMedicationNotifications();
+    await cancelMedicationNotificationsForScope(currentScope);
   }
 
   async function handleSelectSnooze(minutes: 5 | 10 | 15) {
@@ -108,12 +109,8 @@ export function SettingsScreen() {
           onPress: () => {
             void (async () => {
               await cancelAllMedicationNotifications();
-              await AsyncStorage.multiRemove([
-                STORE_KEY,
-                PREFS_KEY,
-                TUTORIAL_SEEN_KEY,
-                'simplicare_has_seen_welcome_v1',
-              ]);
+              await clearAllScopedData();
+              await AsyncStorage.multiRemove([PREFS_KEY, TUTORIAL_SEEN_KEY, 'simplicare_has_seen_welcome_v1']);
               await resetState();
               await updatePrefs({
                 displayName: '',

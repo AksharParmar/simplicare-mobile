@@ -35,8 +35,10 @@ import { ScanAddMedicationScreen } from './src/screens/ScanAddMedicationScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppStateProvider } from './src/state/AppStateContext';
+import { useAppState } from './src/state/AppStateContext';
 import { AuthProvider, useAuth } from './src/state/AuthContext';
 import { PreferencesProvider } from './src/state/PreferencesContext';
+import { scopeKey } from './src/storage/scope';
 import { hasSeenTutorial, setHasSeenTutorial } from './src/storage/tutorialStore';
 import { spacing, typography } from './src/theme/tokens';
 
@@ -174,6 +176,7 @@ function SplashGate() {
 
 function AppShell() {
   const { loading, isGuest, session } = useAuth();
+  const { isLoading: isAppStateLoading, currentScope } = useAppState();
   const canAccessApp = isGuest || Boolean(session);
 
   const [isTutorialVisible, setIsTutorialVisible] = useState(false);
@@ -181,6 +184,10 @@ function AppShell() {
   const [queuedReminder, setQueuedReminder] = useState<DoseReminderPayload | null>(null);
 
   const openDoseReminder = useCallback((payload: DoseReminderPayload) => {
+    if (payload.scope && payload.scope !== scopeKey(currentScope)) {
+      return;
+    }
+
     if (navigationRef.isReady()) {
       navigationRef.navigate('Tabs', {
         screen: 'Home',
@@ -193,7 +200,7 @@ function AppShell() {
     }
 
     setQueuedReminder(payload);
-  }, []);
+  }, [currentScope]);
 
   useEffect(() => {
     if (!canAccessApp) {
@@ -269,7 +276,7 @@ function AppShell() {
     navigationRef.navigate('ManualAddMedication');
   }
 
-  if (loading) {
+  if (loading || (canAccessApp && isAppStateLoading)) {
     return <SplashGate />;
   }
 

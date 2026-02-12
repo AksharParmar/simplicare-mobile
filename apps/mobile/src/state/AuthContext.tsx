@@ -3,10 +3,12 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 
 import { supabaseProvider } from '../auth/providers/supabaseProvider';
 import { loadAuthPrefs, setGuestMode } from '../storage/authPrefs';
+import { getActiveScope, StorageScope } from '../storage/scope';
 
 type AuthContextValue = {
   loading: boolean;
   isGuest: boolean;
+  activeScope: StorageScope;
   user: User | null;
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
@@ -139,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       loading,
       isGuest,
+      activeScope: getActiveScope({ isGuest, userId: user?.id }),
       user,
       session,
       login,

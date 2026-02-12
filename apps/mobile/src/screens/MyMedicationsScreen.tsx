@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -65,7 +66,7 @@ function formatNextTime(times: string[]): string {
 export function MyMedicationsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const stackNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { state, deleteMedication } = useAppState();
+  const { state, isLoading, deleteMedication } = useAppState();
   const [banner, setBanner] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('name');
@@ -219,7 +220,14 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
         </View>
       </View>
 
-      {visibleMedications.length === 0 ? (
+      {isLoading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color="#0f172a" />
+          <Text style={styles.loadingText}>Loading medications...</Text>
+        </View>
+      ) : null}
+
+      {!isLoading && visibleMedications.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{state.medications.length === 0 ? 'No medications yet' : 'No matches found'}</Text>
           <Text style={styles.emptySubtitle}>
@@ -236,7 +244,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
         </View>
       ) : null}
 
-      {visibleMedications.map((medication) => {
+      {!isLoading && visibleMedications.map((medication) => {
         const allTimes = schedulesByMedication.get(medication.id) ?? [];
         return (
           <Swipeable
@@ -272,7 +280,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
         );
       })}
 
-      <View style={styles.sectionWrap}>
+      {!isLoading ? <View style={styles.sectionWrap}>
         <Text style={styles.sectionTitle}>Recent activity</Text>
         {recentLogs.length === 0 ? (
           <Text style={styles.empty}>No dose logs yet.</Text>
@@ -288,7 +296,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
             </View>
           ))
         )}
-      </View>
+      </View> : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -415,6 +423,16 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: typography.body,
     fontWeight: '600',
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+  },
+  loadingText: {
+    fontSize: typography.caption,
+    color: '#64748b',
   },
   empty: {
     fontSize: typography.body,
