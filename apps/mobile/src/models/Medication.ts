@@ -7,4 +7,5 @@ export type Medication = {
   scanSource?: 'pasted' | 'ocr';
   scanCapturedAt?: string;
   createdAt: string;
+  updatedAt?: string;
 };

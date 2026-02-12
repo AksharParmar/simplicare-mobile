@@ -45,7 +45,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
-  const { state, resetState, currentScope } = useAppState();
+  const { state, resetState, currentScope, syncStatus, syncError, retrySync, lastSyncedAt } = useAppState();
   const { isGuest, session, logout, exitGuest } = useAuth();
   const { prefs, updatePrefs } = usePreferences();
 
@@ -189,6 +189,31 @@ export function SettingsScreen() {
           </>
         )}
       </View>
+
+      {!isGuest ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Cloud Sync</Text>
+          <View style={styles.rowStatic}>
+            <Text style={styles.rowLabel}>Status</Text>
+            <Text style={styles.rowValue}>
+              {syncStatus === 'syncing'
+                ? 'Syncing...'
+                : syncStatus === 'error'
+                  ? 'Sync error'
+                  : lastSyncedAt
+                    ? 'Synced just now'
+                    : 'Not synced yet'}
+            </Text>
+          </View>
+          {syncError ? <Text style={styles.helperText}>{syncError}</Text> : null}
+          {syncStatus === 'error' ? (
+            <Pressable style={styles.row} onPress={() => void retrySync()}>
+              <Text style={styles.rowLabel}>Retry sync</Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Profile</Text>

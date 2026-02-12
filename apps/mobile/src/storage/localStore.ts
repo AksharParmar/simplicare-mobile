@@ -23,6 +23,83 @@ function scopedStoreKey(scope: StorageScope): string {
   return `${STORE_KEY_PREFIX}${scopeKey(scope)}`;
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function createUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.random() * 16 | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function normalizeStateIds(state: AppState): { state: AppState; changed: boolean } {
+  let changed = false;
+
+  const medicationIdMap = new Map<string, string>();
+  const normalizedMedications = state.medications.map((medication) => {
+    if (isUuid(medication.id)) {
+      medicationIdMap.set(medication.id, medication.id);
+      return medication;
+    }
+
+    const nextId = createUuid();
+    medicationIdMap.set(medication.id, nextId);
+    changed = true;
+    return {
+      ...medication,
+      id: nextId,
+    };
+  });
+
+  const normalizedSchedules = state.schedules.map((schedule) => {
+    const mappedMedicationId = medicationIdMap.get(schedule.medicationId) ?? schedule.medicationId;
+    const nextId = isUuid(schedule.id) ? schedule.id : createUuid();
+
+    if (mappedMedicationId !== schedule.medicationId || nextId !== schedule.id) {
+      changed = true;
+      return {
+        ...schedule,
+        id: nextId,
+        medicationId: mappedMedicationId,
+      };
+    }
+
+    return schedule;
+  });
+
+  const normalizedDoseLogs = state.doseLogs.map((log) => {
+    const mappedMedicationId = medicationIdMap.get(log.medicationId) ?? log.medicationId;
+    const nextId = isUuid(log.id) ? log.id : createUuid();
+
+    if (mappedMedicationId !== log.medicationId || nextId !== log.id) {
+      changed = true;
+      return {
+        ...log,
+        id: nextId,
+        medicationId: mappedMedicationId,
+      };
+    }
+
+    return log;
+  });
+
+  return {
+    state: {
+      medications: normalizedMedications,
+      schedules: normalizedSchedules,
+      doseLogs: normalizedDoseLogs,
+    },
+    changed,
+  };
+}
+
 function parseState(raw: string | null): AppState {
   if (!raw) {
     return EMPTY_STATE;
@@ -30,10 +107,22 @@ function parseState(raw: string | null): AppState {
 
   try {
     const parsed = JSON.parse(raw) as Partial<AppState>;
+    const medications = (parsed.medications ?? []).map((medication) => ({
+      ...medication,
+      updatedAt: medication.updatedAt ?? medication.createdAt,
+    }));
+    const schedules = (parsed.schedules ?? []).map((schedule) => ({
+      ...schedule,
+      updatedAt: schedule.updatedAt ?? schedule.createdAt,
+    }));
+    const doseLogs = (parsed.doseLogs ?? []).map((log) => ({
+      ...log,
+      updatedAt: log.updatedAt ?? log.loggedAt,
+    }));
     return {
-      medications: parsed.medications ?? [],
-      schedules: parsed.schedules ?? [],
-      doseLogs: parsed.doseLogs ?? [],
+      medications,
+      schedules,
+      doseLogs,
     };
   } catch {
     return EMPTY_STATE;
@@ -62,8 +151,16 @@ export async function migrateLegacyStoreToScoped(): Promise<void> {
 
 export async function loadState(scope: StorageScope): Promise<AppState> {
   await migrateLegacyStoreToScoped();
-  const raw = await AsyncStorage.getItem(scopedStoreKey(scope));
-  return parseState(raw);
+  const key = scopedStoreKey(scope);
+  const raw = await AsyncStorage.getItem(key);
+  const parsed = parseState(raw);
+  const normalized = normalizeStateIds(parsed);
+
+  if (normalized.changed) {
+    await AsyncStorage.setItem(key, JSON.stringify(normalized.state));
+  }
+
+  return normalized.state;
 }
 
 export async function saveState(scope: StorageScope, state: AppState): Promise<void> {
@@ -134,10 +231,11 @@ export async function updateMedication(
   patch: Partial<Omit<Medication, 'id' | 'createdAt'>>,
 ): Promise<AppState> {
   const state = await loadState(scope);
+  const nextUpdatedAt = new Date().toISOString();
   const next = {
     ...state,
     medications: state.medications.map((medication) =>
-      medication.id === id ? { ...medication, ...patch } : medication,
+      medication.id === id ? { ...medication, ...patch, updatedAt: nextUpdatedAt } : medication,
     ),
   };
   await saveState(scope, next);
@@ -150,10 +248,11 @@ export async function updateSchedule(
   patch: Partial<Omit<Schedule, 'id' | 'medicationId' | 'createdAt'>>,
 ): Promise<AppState> {
   const state = await loadState(scope);
+  const nextUpdatedAt = new Date().toISOString();
   const next = {
     ...state,
     schedules: state.schedules.map((schedule) =>
-      schedule.id === id ? { ...schedule, ...patch } : schedule,
+      schedule.id === id ? { ...schedule, ...patch, updatedAt: nextUpdatedAt } : schedule,
     ),
   };
   await saveState(scope, next);

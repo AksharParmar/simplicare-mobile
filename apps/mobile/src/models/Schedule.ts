@@ -6,4 +6,5 @@ export type Schedule = {
   startDate: string;
   daysOfWeek?: number[];
   createdAt: string;
+  updatedAt?: string;
 };

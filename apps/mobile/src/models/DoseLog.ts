@@ -6,5 +6,6 @@ export type DoseLog = {
   scheduledAt: string;
   status: DoseLogStatus;
   loggedAt: string;
+  updatedAt?: string;
   note?: string;
 };
