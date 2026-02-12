@@ -1,5 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
@@ -8,6 +9,7 @@ import { radius, spacing, typography } from '../theme/tokens';
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicationDetail'>;
 
 export function MedicationDetailScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { medicationId } = route.params;
   const { state, deleteMedication } = useAppState();
 
@@ -45,7 +47,7 @@ export function MedicationDetailScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.title}>{medication.name}</Text>
 
       <View style={styles.sectionCard}>

@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RootStackParamList, RootTabParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
@@ -33,6 +34,7 @@ function formatNextTime(times: string[]): string {
 }
 
 export function MyMedicationsScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const stackNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { state } = useAppState();
   const [banner, setBanner] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
   }, [route.params?.flashMessage, navigation]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Medications</Text>
         <Text style={styles.editText}>Edit</Text>

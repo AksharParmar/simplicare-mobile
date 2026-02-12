@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AddHubActionSheet } from './src/components/AddHubActionSheet';
 import { WelcomeModal } from './src/components/WelcomeModal';
@@ -74,7 +75,11 @@ function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
       }}
     >
       <Tab.Screen name="Home" component={TodayScreen} options={{ tabBarLabel: 'Home' }} />
-      <Tab.Screen name="Medications" component={MyMedicationsScreen} options={{ tabBarLabel: 'Medications' }} />
+      <Tab.Screen
+        name="Medications"
+        component={MyMedicationsScreen}
+        options={{ tabBarLabel: 'Medications' }}
+      />
       <Tab.Screen
         name="AddHub"
         component={AddHubPlaceholder}
@@ -244,9 +249,11 @@ function AppShell() {
 
 export default function App() {
   return (
-    <AppStateProvider>
-      <AppShell />
-    </AppStateProvider>
+    <SafeAreaProvider>
+      <AppStateProvider>
+        <AppShell />
+      </AppStateProvider>
+    </SafeAreaProvider>
   );
 }
 

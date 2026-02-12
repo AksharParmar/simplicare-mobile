@@ -1,6 +1,7 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DoseActionSheet } from '../components/DoseActionSheet';
 import { RootTabParamList } from '../navigation/types';
@@ -11,7 +12,13 @@ import {
 } from '../notifications/notificationScheduler';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
-import { getTodayDoseInstances, TodayDoseInstance } from '../utils/todayDoses';
+import {
+  getCompletedDoseKeySetForToday,
+  getDoseKeyFromInstance,
+  getTodayDoseInstances,
+  getTodayDoseStats,
+  TodayDoseInstance,
+} from '../utils/todayDoses';
 
 type Props = BottomTabScreenProps<RootTabParamList, 'Home'>;
 
@@ -20,6 +27,7 @@ type ActiveDose = TodayDoseInstance & {
 };
 
 export function TodayScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { state, isLoading, addDoseLog, refresh } = useAppState();
   const [submitting, setSubmitting] = useState(false);
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
@@ -31,14 +39,30 @@ export function TodayScreen({ route, navigation }: Props) {
     [state.medications],
   );
 
+  const allDosesForToday = useMemo(() => getTodayDoseInstances(state, new Date()), [state]);
+
+  const completedDoseKeys = useMemo(
+    () => getCompletedDoseKeySetForToday(state, new Date()),
+    [state],
+  );
+
+  const stats = useMemo(
+    () => getTodayDoseStats(allDosesForToday, state, new Date()),
+    [allDosesForToday, state],
+  );
+
   const dosesWithInstructions = useMemo(
     () =>
-      getTodayDoseInstances(state, new Date()).map((dose) => ({
-        ...dose,
-        instructions: medicationById.get(dose.medicationId)?.instructions,
-      })),
-    [state, medicationById],
+      allDosesForToday
+        .filter((dose) => !completedDoseKeys.has(getDoseKeyFromInstance(dose)))
+        .map((dose) => ({
+          ...dose,
+          instructions: medicationById.get(dose.medicationId)?.instructions,
+        })),
+    [allDosesForToday, completedDoseKeys, medicationById],
   );
+
+  const totalForBar = Math.max(1, stats.total);
 
   useEffect(() => {
     const reminder = route.params?.reminder;
@@ -118,16 +142,33 @@ export function TodayScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.title}>Today</Text>
       <Text style={styles.subtitle}>Next doses</Text>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
 
+      <View style={styles.statsCard}>
+        <Text style={styles.statsTitle}>Today stats</Text>
+        <View style={styles.statsRow}>
+          <Text style={styles.statLabel}>Taken: {stats.taken}</Text>
+          <Text style={styles.statLabel}>Skipped: {stats.skipped}</Text>
+          <Text style={styles.statLabel}>Remaining: {stats.remaining}</Text>
+        </View>
+        <View style={styles.barTrack}>
+          <View style={[styles.barTaken, { flex: stats.taken / totalForBar }]} />
+          <View style={[styles.barSkipped, { flex: stats.skipped / totalForBar }]} />
+          <View style={[styles.barRemaining, { flex: stats.remaining / totalForBar }]} />
+        </View>
+      </View>
+
       {isLoading ? <ActivityIndicator style={styles.loader} /> : null}
 
       {!isLoading && dosesWithInstructions.length === 0 ? (
-        <Text style={styles.empty}>No doses scheduled for today yet.</Text>
+        <View style={styles.doneCard}>
+          <Text style={styles.doneTitle}>All done for today 🎉</Text>
+          <Text style={styles.doneSubtitle}>Your logs are saved in Medications.</Text>
+        </View>
       ) : null}
 
       {!isLoading
@@ -172,7 +213,6 @@ export function TodayScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
     backgroundColor: '#f8fafc',
   },
@@ -199,13 +239,66 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: '600',
   },
+  statsCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  statsTitle: {
+    fontSize: typography.subtitle,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: spacing.sm,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  statLabel: {
+    fontSize: typography.caption,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  barTrack: {
+    height: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    backgroundColor: '#e2e8f0',
+  },
+  barTaken: {
+    backgroundColor: '#16a34a',
+  },
+  barSkipped: {
+    backgroundColor: '#f59e0b',
+  },
+  barRemaining: {
+    backgroundColor: '#94a3b8',
+  },
   loader: {
     marginBottom: spacing.md,
   },
-  empty: {
-    fontSize: typography.body,
-    color: '#475569',
+  doneCard: {
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    backgroundColor: '#ecfdf5',
+    borderRadius: radius.lg,
+    padding: spacing.md,
     marginBottom: spacing.md,
+  },
+  doneTitle: {
+    fontSize: typography.subtitle,
+    color: '#065f46',
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  doneSubtitle: {
+    fontSize: typography.body,
+    color: '#065f46',
   },
   card: {
     backgroundColor: '#ffffff',
