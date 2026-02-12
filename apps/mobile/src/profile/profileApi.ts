@@ -1,3 +1,4 @@
+import { getSupabaseEnv } from '../config/env';
 import { getSupabaseClient } from '../config/supabase';
 import type { Profile } from './profileTypes';
 
@@ -8,6 +9,12 @@ type ProfileRow = {
 };
 
 const avatarUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const AVATARS_BUCKET = 'avatars';
+
+type BucketCheckResult = {
+  ok: boolean;
+  message?: string;
+};
 
 function toProfile(row: ProfileRow): Profile {
   return {
@@ -86,14 +93,33 @@ export async function uploadAvatar(
   const blob = await response.blob();
   const extension = mimeType?.includes('png') ? 'png' : 'jpg';
   const contentType = mimeType ?? (extension === 'png' ? 'image/png' : 'image/jpeg');
-  const avatarPath = `${userId}/avatar-${Date.now()}.${extension}`;
+  const avatarPath = `${userId}/avatar.${extension}`;
 
-  const { error } = await client.storage.from('avatars').upload(avatarPath, blob, {
+  const { error } = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
     contentType,
     upsert: true,
   });
 
   if (error) {
+    if (__DEV__) {
+      const supabaseUrl = getSupabaseEnv().supabaseUrl;
+      let projectHost = supabaseUrl;
+      try {
+        projectHost = new URL(supabaseUrl).host;
+      } catch {
+        projectHost = supabaseUrl;
+      }
+
+      console.log('[Profile] Avatar upload failed', {
+        projectHost,
+        bucket: AVATARS_BUCKET,
+        path: avatarPath,
+        name: error.name,
+        statusCode: 'statusCode' in error ? (error as { statusCode?: string }).statusCode : undefined,
+        message: error.message,
+        raw: error,
+      });
+    }
     throw new Error(error.message);
   }
 
@@ -108,7 +134,7 @@ export async function getAvatarSignedUrl(avatarPath: string): Promise<string> {
   }
 
   const client = getSupabaseClient();
-  const { data, error } = await client.storage.from('avatars').createSignedUrl(avatarPath, 3600);
+  const { data, error } = await client.storage.from(AVATARS_BUCKET).createSignedUrl(avatarPath, 3600);
   if (error || !data?.signedUrl) {
     throw new Error(error?.message ?? 'Could not create signed URL');
   }
@@ -119,4 +145,33 @@ export async function getAvatarSignedUrl(avatarPath: string): Promise<string> {
   });
 
   return data.signedUrl;
+}
+
+export async function assertAvatarsBucketExists(): Promise<BucketCheckResult> {
+  if (!__DEV__) {
+    return { ok: true };
+  }
+
+  const client = getSupabaseClient();
+  const { data, error } = await client.storage.listBuckets();
+
+  if (error) {
+    return {
+      ok: false,
+      message:
+        "Unable to list buckets (permissions). Verify 'avatars' bucket exists and storage policies allow access.",
+    };
+  }
+
+  const bucketNames = (data ?? []).map((bucket) => bucket.name);
+  console.log('[Profile] Supabase storage buckets:', bucketNames);
+
+  if (!bucketNames.includes(AVATARS_BUCKET)) {
+    return {
+      ok: false,
+      message: "Supabase bucket 'avatars' not found. Create it in Dashboard \u2192 Storage.",
+    };
+  }
+
+  return { ok: true };
 }

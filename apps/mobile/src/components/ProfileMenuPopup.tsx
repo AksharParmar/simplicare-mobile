@@ -1,12 +1,14 @@
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { radius, spacing, typography } from '../theme/tokens';
 
 type Props = {
   visible: boolean;
   isGuest: boolean;
+  anchor?: { x: number; y: number; width: number; height: number } | null;
   onClose: () => void;
   onEditPhoto: () => void;
   onAccountSettings: () => void;
@@ -15,12 +17,23 @@ type Props = {
 export function ProfileMenuPopup({
   visible,
   isGuest,
+  anchor,
   onClose,
   onEditPhoto,
   onAccountSettings,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
+  const screen = Dimensions.get('window');
+  const menuWidth = Math.min(252, Math.max(220, screen.width - spacing.lg * 2));
+  const defaultRight = spacing.lg;
+  const fallbackTop = insets.top + 62;
+  const preferredTop = (anchor?.y ?? fallbackTop) + (anchor?.height ?? 0) + spacing.sm;
+  const maxTop = screen.height - insets.bottom - 280;
+  const top = Math.min(preferredTop, Math.max(insets.top + spacing.sm, maxTop));
+  const leftFromAnchor = anchor ? anchor.x + anchor.width - menuWidth : screen.width - defaultRight - menuWidth;
+  const left = Math.max(spacing.md, Math.min(leftFromAnchor, screen.width - menuWidth - spacing.md));
 
   useEffect(() => {
     if (visible) {
@@ -46,8 +59,20 @@ export function ProfileMenuPopup({
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Animated.View style={[styles.popupWrap, { opacity, transform: [{ scale }] }]}>
+      <View style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Animated.View
+          style={[
+            styles.popupWrap,
+            {
+              width: menuWidth,
+              top,
+              left,
+              opacity,
+              transform: [{ scale }],
+            },
+          ]}
+        >
           <BlurView intensity={45} tint="light" style={styles.popup}>
             <Text style={styles.title}>Profile</Text>
 
@@ -70,24 +95,28 @@ export function ProfileMenuPopup({
             </Pressable>
           </BlurView>
         </Animated.View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.16)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 90,
-    paddingRight: spacing.lg,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.14)',
   },
   popupWrap: {
-    width: 250,
+    position: 'absolute',
     borderRadius: 18,
     overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
   },
   popup: {
     borderRadius: 18,
@@ -103,7 +132,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   optionButton: {
-    minHeight: 48,
+    minHeight: 54,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(203, 213, 225, 0.9)',
@@ -129,7 +158,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   cancelButton: {
-    minHeight: 44,
+    minHeight: 52,
     borderRadius: radius.md,
     backgroundColor: 'rgba(241, 245, 249, 0.92)',
     alignItems: 'center',

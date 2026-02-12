@@ -2,9 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { AvatarCropEditorModal } from '../components/AvatarCropEditorModal';
 import {
+  assertAvatarsBucketExists,
   getAvatarSignedUrl,
   getOrCreateProfile,
   updateProfile,
@@ -76,6 +78,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (!user) {
         setProfile(null);
         return;
+      }
+
+      const bucketCheck = await assertAvatarsBucketExists();
+      if (!bucketCheck.ok) {
+        setError(bucketCheck.message ?? 'Supabase avatars bucket check failed.');
       }
 
       const remoteProfile = await getOrCreateProfile(user.id);
@@ -168,12 +175,20 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const bucketCheck = await assertAvatarsBucketExists();
+      if (!bucketCheck.ok) {
+        setError(bucketCheck.message ?? "Supabase bucket 'avatars' check failed.");
+        Alert.alert('Upload failed', 'Upload failed. Check Storage bucket + policies.');
+        return;
+      }
+
       const avatarPath = await uploadAvatar(user.id, cropResult.uri, cropResult.mimeType);
       await updateProfile(user.id, { avatarPath });
       await refreshProfile();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Failed to update profile photo.');
+      Alert.alert('Upload failed', 'Upload failed. Check Storage bucket + policies.');
     }
   }, [isGuest, user, refreshProfile]);
 

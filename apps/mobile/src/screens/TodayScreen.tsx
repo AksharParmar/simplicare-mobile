@@ -1,5 +1,5 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   ActivityIndicator,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   UIManager,
   View,
 } from 'react-native';
@@ -67,6 +68,13 @@ export function TodayScreen({ route, navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [profileMenuAnchor, setProfileMenuAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const avatarButtonRef = useRef<View | null>(null);
 
   const now = new Date();
   const profileName = profile?.displayName?.trim() || (isGuest ? 'Guest' : '');
@@ -213,6 +221,18 @@ export function TodayScreen({ route, navigation }: Props) {
     }
   }
 
+  function openProfileMenu() {
+    if (!avatarButtonRef.current) {
+      setShowProfileMenu(true);
+      return;
+    }
+
+    avatarButtonRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+      setProfileMenuAnchor({ x, y, width, height });
+      setShowProfileMenu(true);
+    });
+  }
+
   return (
     <ScrollView
       contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
@@ -222,7 +242,7 @@ export function TodayScreen({ route, navigation }: Props) {
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>Today</Text>
         </View>
-        <Pressable style={styles.avatarButton} onPress={() => setShowProfileMenu(true)}>
+        <TouchableOpacity ref={avatarButtonRef} style={styles.avatarButton} onPress={openProfileMenu}>
           {profile?.avatarUrl ? (
             <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
           ) : (
@@ -230,7 +250,7 @@ export function TodayScreen({ route, navigation }: Props) {
               {(profileName || 'G').slice(0, 1).toUpperCase()}
             </Text>
           )}
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
@@ -396,6 +416,7 @@ export function TodayScreen({ route, navigation }: Props) {
       <ProfileMenuPopup
         visible={showProfileMenu}
         isGuest={isGuest}
+        anchor={profileMenuAnchor}
         onClose={() => setShowProfileMenu(false)}
         onEditPhoto={() => {
           setShowProfileMenu(false);
