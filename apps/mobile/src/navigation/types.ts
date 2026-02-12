@@ -24,4 +24,9 @@ export type RootStackParamList = {
   Tabs: NavigatorScreenParams<RootTabParamList> | undefined;
   ManualAddMedication: undefined;
   ScanAddMedication: undefined;
+  ConfirmScannedMedication: {
+    imageUri?: string;
+    rawText: string;
+    ocrError?: string;
+  };
 };

@@ -2,7 +2,7 @@ import {
   NavigationContainer,
   createNavigationContainerRef,
 } from '@react-navigation/native';
-import { BottomTabBarButtonProps, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
@@ -21,6 +21,7 @@ import {
   configureNotificationChannel,
   requestNotificationPermissions,
 } from './src/notifications/notificationScheduler';
+import { ConfirmScannedMedicationScreen } from './src/screens/ConfirmScannedMedicationScreen';
 import { CopilotScreen } from './src/screens/CopilotScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { ManualAddMedicationScreen } from './src/screens/ManualAddMedicationScreen';
@@ -32,7 +33,7 @@ import {
   hasSeenWelcomeModal,
   setHasSeenWelcomeModal,
 } from './src/storage/welcomeModalStorage';
-import { radius, spacing, typography } from './src/theme/tokens';
+import { spacing, typography } from './src/theme/tokens';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -204,6 +205,11 @@ function AppShell() {
             name="ScanAddMedication"
             component={ScanAddMedicationScreen}
             options={{ title: 'Scan Label' }}
+          />
+          <Stack.Screen
+            name="ConfirmScannedMedication"
+            component={ConfirmScannedMedicationScreen}
+            options={{ title: 'Confirm Scan' }}
           />
         </Stack.Navigator>
       </NavigationContainer>
