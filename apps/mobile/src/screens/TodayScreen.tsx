@@ -1,7 +1,17 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  UIManager,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DoseActionSheet } from '../components/DoseActionSheet';
@@ -11,11 +21,11 @@ import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
 import { formatHHMMTo12Hour } from '../utils/timeFormat';
+import { getAdherenceStreak, getLastNDaysAdherence } from '../utils/adherence';
 import {
   getCompletedDoseKeySetForToday,
   getDoseKeyFromInstance,
   getTodayDoseInstances,
-  getTodayDoseStats,
   TodayDoseInstance,
 } from '../utils/todayDoses';
 
@@ -25,6 +35,27 @@ type ActiveDose = TodayDoseInstance & {
   instructions?: string;
   strength?: string;
 };
+
+function formatRelativeTime(scheduledAt: string, now: Date): string {
+  const target = new Date(scheduledAt);
+  const diffMinutes = Math.round((target.getTime() - now.getTime()) / 60000);
+
+  if (Math.abs(diffMinutes) <= 5) {
+    return 'Now';
+  }
+
+  if (diffMinutes < 60) {
+    return `In ${diffMinutes} min`;
+  }
+
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  if (minutes === 0) {
+    return `In ${hours} hr`;
+  }
+
+  return `In ${hours} hr ${minutes} min`;
+}
 
 export function TodayScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -43,19 +74,21 @@ export function TodayScreen({ route, navigation }: Props) {
 
   const hasAnyMedication = state.medications.length > 0;
 
-  const allDosesForToday = useMemo(() => getTodayDoseInstances(state, new Date()), [state]);
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  const now = new Date();
+  const allDosesForToday = useMemo(() => getTodayDoseInstances(state, now), [state, now]);
 
   const completedDoseKeys = useMemo(
-    () => getCompletedDoseKeySetForToday(state, new Date()),
-    [state],
+    () => getCompletedDoseKeySetForToday(state, now),
+    [state, now],
   );
 
-  const stats = useMemo(
-    () => getTodayDoseStats(allDosesForToday, state, new Date()),
-    [allDosesForToday, state],
-  );
-
-  const dosesWithInstructions = useMemo(
+  const remainingDoses = useMemo(
     () =>
       allDosesForToday
         .filter((dose) => !completedDoseKeys.has(getDoseKeyFromInstance(dose)))
@@ -67,7 +100,30 @@ export function TodayScreen({ route, navigation }: Props) {
     [allDosesForToday, completedDoseKeys, medicationById],
   );
 
-  const totalForBar = Math.max(1, stats.total);
+  const upcomingDoses = useMemo(
+    () => remainingDoses.filter((dose) => new Date(dose.scheduledAt).getTime() >= now.getTime()),
+    [remainingDoses, now],
+  );
+
+  const nextDose = upcomingDoses[0] ?? null;
+  const laterDoses = nextDose
+    ? upcomingDoses.filter((dose) => dose.id !== nextDose.id).slice(0, 5)
+    : [];
+  const hiddenLaterCount = nextDose ? Math.max(0, upcomingDoses.length - 1 - laterDoses.length) : 0;
+
+  const last7Days = useMemo(() => getLastNDaysAdherence(state, 7, now), [state, now]);
+  const streak = useMemo(() => getAdherenceStreak(state, now), [state, now]);
+  const sevenDayPercent = Math.round(last7Days.overallRate * 100);
+  const sevenDayTaken = useMemo(
+    () => last7Days.days.reduce((sum, day) => sum + day.taken, 0),
+    [last7Days.days],
+  );
+  const sevenDaySkipped = useMemo(
+    () => last7Days.days.reduce((sum, day) => sum + day.skipped, 0),
+    [last7Days.days],
+  );
+  const hasSevenDayData = sevenDayTaken + sevenDaySkipped > 0;
+  const sevenDayDenominator = Math.max(1, sevenDayTaken + sevenDaySkipped);
 
   useEffect(() => {
     const reminder = route.params?.reminder;
@@ -75,7 +131,7 @@ export function TodayScreen({ route, navigation }: Props) {
       return;
     }
 
-    const matchingDose = dosesWithInstructions.find(
+    const matchingDose = remainingDoses.find(
       (dose) =>
         dose.medicationId === reminder.medicationId &&
         dose.scheduleId === reminder.scheduleId &&
@@ -85,7 +141,7 @@ export function TodayScreen({ route, navigation }: Props) {
     if (matchingDose) {
       setSelectedDose(matchingDose);
     }
-  }, [route.params?.openedAt, route.params?.reminder, dosesWithInstructions]);
+  }, [route.params?.openedAt, route.params?.reminder, remainingDoses]);
 
   useEffect(() => {
     const flashMessage = route.params?.flashMessage;
@@ -102,24 +158,29 @@ export function TodayScreen({ route, navigation }: Props) {
     return () => clearTimeout(timer);
   }, [route.params?.flashMessage, navigation]);
 
-  async function handleLog(status: 'taken' | 'skipped') {
-    if (!selectedDose) {
-      return;
-    }
-
+  async function handleLogForDose(dose: ActiveDose, status: 'taken' | 'skipped') {
     setSubmitting(true);
     try {
       await addDoseLog({
-        medicationId: selectedDose.medicationId,
-        scheduledAt: selectedDose.scheduledAt,
+        medicationId: dose.medicationId,
+        scheduledAt: dose.scheduledAt,
         status,
       });
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       await refresh();
       setSelectedDose(null);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleLog(status: 'taken' | 'skipped') {
+    if (!selectedDose) {
+      return;
+    }
+
+    await handleLogForDose(selectedDose, status);
   }
 
   async function handleSnooze() {
@@ -147,22 +208,33 @@ export function TodayScreen({ route, navigation }: Props) {
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.greeting}>{greeting}</Text>
       <Text style={styles.title}>Today</Text>
-      <Text style={styles.subtitle}>Next doses</Text>
+      <View style={styles.headerMetaRow}>
+        {streak > 0 ? (
+          <View style={styles.metaPill}>
+            <Text style={styles.metaPillText}>🔥 {streak}-day streak</Text>
+          </View>
+        ) : null}
+        <View style={styles.metaPill}>
+          <Text style={styles.metaPillText}>7-day: {sevenDayPercent}%</Text>
+        </View>
+      </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
 
-      <View style={styles.statsCard}>
-        <Text style={styles.statsTitle}>Today stats</Text>
-        <View style={styles.statsRow}>
-          <Text style={styles.statLabel}>Taken: {stats.taken}</Text>
-          <Text style={styles.statLabel}>Skipped: {stats.skipped}</Text>
-          <Text style={styles.statLabel}>Remaining: {stats.remaining}</Text>
+      <View style={styles.adherenceCard}>
+        <View style={styles.adherenceHeaderRow}>
+          <Text style={styles.adherenceTitle}>7-day adherence</Text>
+          <Text style={styles.adherencePercent}>{hasSevenDayData ? `${sevenDayPercent}%` : 'No data yet'}</Text>
         </View>
         <View style={styles.barTrack}>
-          <View style={[styles.barTaken, { flex: stats.taken / totalForBar }]} />
-          <View style={[styles.barSkipped, { flex: stats.skipped / totalForBar }]} />
-          <View style={[styles.barRemaining, { flex: stats.remaining / totalForBar }]} />
+          <View style={[styles.barTaken, { flex: hasSevenDayData ? sevenDayTaken / sevenDayDenominator : 1 }]} />
+          <View style={[styles.barSkipped, { flex: hasSevenDayData ? sevenDaySkipped / sevenDayDenominator : 0 }]} />
         </View>
+        {hasSevenDayData ? (
+          <Text style={styles.adherenceMeta}>
+            Taken {sevenDayTaken} · Skipped {sevenDaySkipped}
+          </Text>
+        ) : null}
       </View>
 
       {isLoading ? <ActivityIndicator style={styles.loader} /> : null}
@@ -180,31 +252,65 @@ export function TodayScreen({ route, navigation }: Props) {
         </View>
       ) : null}
 
-      {!isLoading && hasAnyMedication && dosesWithInstructions.length === 0 ? (
-        <View style={styles.doneCard}>
-          <Text style={styles.doneTitle}>All done for today 🎉</Text>
-          <Text style={styles.doneSubtitle}>Your logs are saved in Medications.</Text>
-        </View>
+      {!isLoading && hasAnyMedication ? (
+        nextDose ? (
+          <View style={styles.nextCard}>
+            <Text style={styles.nextLabel}>Next up</Text>
+            <Text style={styles.nextMedication}>
+              {nextDose.medicationName}
+              {nextDose.strength ? ` · ${nextDose.strength}` : ''}
+            </Text>
+            <Text style={styles.nextTime}>
+              {formatHHMMTo12Hour(nextDose.timeLabel)} · {formatRelativeTime(nextDose.scheduledAt, now)}
+            </Text>
+            <View style={styles.nextActions}>
+              <Pressable
+                style={({ pressed }) => [styles.primaryAction, pressed && styles.buttonPressed]}
+                onPress={() => void handleLogForDose(nextDose, 'taken')}
+                disabled={submitting}
+              >
+                <Text style={styles.primaryActionText}>Mark Taken</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.secondaryAction, pressed && styles.buttonPressed]}
+                onPress={() => void handleLogForDose(nextDose, 'skipped')}
+                disabled={submitting}
+              >
+                <Text style={styles.secondaryActionText}>Skip</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.doneCard}>
+            <Text style={styles.doneTitle}>All done for today 🎉</Text>
+            <Text style={styles.doneSubtitle}>Your history is saved in Medications.</Text>
+          </View>
+        )
       ) : null}
 
-      {!isLoading && hasAnyMedication
-        ? dosesWithInstructions.map((dose) => (
+      {!isLoading && hasAnyMedication && laterDoses.length > 0 ? (
+        <View style={styles.laterSection}>
+          <View style={styles.laterHeader}>
+            <Text style={styles.laterTitle}>Later today</Text>
+            {hiddenLaterCount > 0 ? (
+              <Pressable onPress={() => navigation.navigate('Medications')}>
+                <Text style={styles.seeAllText}>See all</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {laterDoses.map((dose) => (
             <Pressable
               key={dose.id}
-              style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [styles.laterRow, pressed && styles.buttonPressed]}
               onPress={() => setSelectedDose(dose)}
             >
-              <View style={styles.cardTopRow}>
-                <Text style={styles.cardTitle}>{dose.medicationName}</Text>
-                <View style={[styles.badge, dose.isUpcoming ? styles.badgeUpcoming : styles.badgePast]}>
-                  <Text style={styles.badgeText}>{dose.isUpcoming ? 'Upcoming' : 'Past'}</Text>
-                </View>
-              </View>
-              <Text style={styles.cardTime}>{formatHHMMTo12Hour(dose.timeLabel)}</Text>
-              <Text style={styles.cardHint}>Tap for actions</Text>
+              <Text style={styles.laterName}>{dose.medicationName}</Text>
+              <Text style={styles.laterTime}>{formatHHMMTo12Hour(dose.timeLabel)}</Text>
             </Pressable>
-          ))
-        : null}
+          ))}
+        </View>
+      ) : null}
 
       <DoseActionSheet
         visible={Boolean(selectedDose)}
@@ -237,12 +343,26 @@ const styles = StyleSheet.create({
     fontSize: typography.title,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: typography.subtitle,
-    color: '#334155',
     marginBottom: spacing.md,
+  },
+  headerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  metaPill: {
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    borderRadius: radius.md,
+    backgroundColor: '#ffffff',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  metaPillText: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '700',
   },
   banner: {
     borderWidth: 1,
@@ -256,7 +376,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: '600',
   },
-  statsCard: {
+  adherenceCard: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
     backgroundColor: '#ffffff',
@@ -264,21 +384,26 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  statsTitle: {
-    fontSize: typography.subtitle,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: spacing.sm,
-  },
-  statsRow: {
+  adherenceHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  statLabel: {
+  adherenceTitle: {
+    fontSize: typography.body,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  adherencePercent: {
+    fontSize: typography.body,
+    color: '#0f172a',
+    fontWeight: '700',
+  },
+  adherenceMeta: {
     fontSize: typography.caption,
-    color: '#475569',
-    fontWeight: '600',
+    color: '#64748b',
+    marginTop: spacing.xs,
   },
   barTrack: {
     height: 12,
@@ -292,9 +417,6 @@ const styles = StyleSheet.create({
   },
   barSkipped: {
     backgroundColor: '#f59e0b',
-  },
-  barRemaining: {
-    backgroundColor: '#94a3b8',
   },
   loader: {
     marginBottom: spacing.md,
@@ -353,51 +475,105 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: '#065f46',
   },
-  card: {
+  nextCard: {
     backgroundColor: '#ffffff',
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    padding: spacing.md,
     marginBottom: spacing.md,
   },
-  cardTopRow: {
+  nextLabel: {
+    fontSize: typography.caption,
+    color: '#64748b',
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  nextMedication: {
+    fontSize: typography.title,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: spacing.xs,
+  },
+  nextTime: {
+    fontSize: typography.body,
+    color: '#334155',
+    marginBottom: spacing.md,
+  },
+  nextActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  primaryAction: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.md,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryActionText: {
+    color: '#ffffff',
+    fontSize: typography.body,
+    fontWeight: '700',
+  },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryActionText: {
+    color: '#0f172a',
+    fontSize: typography.body,
+    fontWeight: '700',
+  },
+  laterSection: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
+    padding: spacing.md,
+  },
+  laterHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  cardTitle: {
-    flex: 1,
+  laterTitle: {
     fontSize: typography.subtitle,
-    fontWeight: '600',
     color: '#0f172a',
-    marginRight: spacing.sm,
+    fontWeight: '700',
   },
-  badge: {
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  badgeUpcoming: {
-    backgroundColor: '#dcfce7',
-  },
-  badgePast: {
-    backgroundColor: '#fee2e2',
-  },
-  badgeText: {
+  seeAllText: {
     fontSize: typography.caption,
-    color: '#1f2937',
-    fontWeight: '600',
+    color: '#334155',
+    fontWeight: '700',
   },
-  cardTime: {
-    fontSize: typography.body,
-    color: '#1e293b',
+  laterRow: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    borderRadius: radius.md,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
-  cardHint: {
+  laterName: {
+    fontSize: typography.body,
+    color: '#0f172a',
+  },
+  laterTime: {
     fontSize: typography.caption,
-    color: '#64748b',
+    color: '#334155',
+    fontWeight: '600',
   },
 });
