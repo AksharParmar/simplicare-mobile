@@ -9,6 +9,7 @@ import {
   assertAvatarsBucketExists,
   getAvatarUrl,
   getOrCreateProfile,
+  logAvatarStorageDebug,
   removeAvatarFile,
   updateProfile,
   uploadAvatar,
@@ -181,6 +182,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         Alert.alert('Upload failed', 'Upload failed. Check Storage bucket + policies.');
         return;
       }
+
+      logAvatarStorageDebug({
+        userId: user.id,
+        path: `${user.id}/avatar.jpg`,
+        assetUri: cropResult.uri,
+        assetMimeType: cropResult.mimeType,
+      });
 
       const avatarPath = await uploadAvatar(user.id, cropResult.uri, cropResult.mimeType);
       await updateProfile(user.id, { avatarPath });

@@ -16,6 +16,19 @@ type BucketCheckResult = {
   message?: string;
 };
 
+type AvatarDebugContext = {
+  userId: string | null;
+  path?: string;
+  assetUri?: string;
+  assetMimeType?: string;
+};
+
+type StorageDebugResult = {
+  ok: boolean;
+  bucketNames: string[];
+  message?: string;
+};
+
 function toProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
@@ -91,7 +104,7 @@ export async function uploadAvatar(
 
   const response = await fetch(fileUri);
   const blob = await response.blob();
-  const contentType = mimeType ?? 'image/jpeg';
+  const contentType = 'image/jpeg';
   const avatarPath = `${userId}/avatar.jpg`;
 
   let { error } = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
@@ -198,4 +211,47 @@ export async function assertAvatarsBucketExists(): Promise<BucketCheckResult> {
   }
 
   return { ok: true };
+}
+
+export async function runAvatarStorageDebugCheck(): Promise<StorageDebugResult> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.storage.listBuckets();
+  if (error) {
+    return {
+      ok: false,
+      bucketNames: [],
+      message: "Unable to list buckets (permissions). Verify bucket 'avatars' exists in Dashboard -> Storage.",
+    };
+  }
+
+  const bucketNames = (data ?? []).map((bucket) => bucket.name);
+  const hasAvatars = bucketNames.includes(AVATARS_BUCKET);
+  return {
+    ok: hasAvatars,
+    bucketNames,
+    message: hasAvatars ? undefined : "Supabase bucket 'avatars' not found. Create it in Dashboard -> Storage.",
+  };
+}
+
+export function logAvatarStorageDebug(context: AvatarDebugContext): void {
+  if (!__DEV__) {
+    return;
+  }
+
+  const supabaseUrl = getSupabaseEnv().supabaseUrl;
+  let projectHost = supabaseUrl;
+  try {
+    projectHost = new URL(supabaseUrl).host;
+  } catch {
+    projectHost = supabaseUrl;
+  }
+
+  console.log('[Profile] Avatar storage debug', {
+    projectHost,
+    userId: context.userId ?? 'guest',
+    bucket: AVATARS_BUCKET,
+    path: context.path ?? '(not set)',
+    assetMimeType: context.assetMimeType ?? '(unknown)',
+    assetUri: context.assetUri ?? '(unknown)',
+  });
 }
