@@ -32,6 +32,7 @@ import { ScanAddMedicationScreen } from './src/screens/ScanAddMedicationScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppStateProvider } from './src/state/AppStateContext';
+import { PreferencesProvider } from './src/state/PreferencesContext';
 import {
   hasSeenWelcomeModal,
   setHasSeenWelcomeModal,
@@ -250,9 +251,11 @@ function AppShell() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppStateProvider>
-        <AppShell />
-      </AppStateProvider>
+      <PreferencesProvider>
+        <AppStateProvider>
+          <AppShell />
+        </AppStateProvider>
+      </PreferencesProvider>
     </SafeAreaProvider>
   );
 }
