@@ -1,6 +1,16 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { RootStackParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
@@ -89,6 +99,7 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
         timezone,
         startDate,
       });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       navigation.navigate('Tabs', {
         screen: 'Home',
@@ -105,7 +116,12 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Add medication</Text>
       <Text style={styles.subtitle}>Manual entry</Text>
 
@@ -155,7 +171,10 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
             autoCapitalize="none"
             keyboardType="numbers-and-punctuation"
           />
-          <Pressable style={styles.addTimeButton} onPress={handleAddTime}>
+          <Pressable
+            style={({ pressed }) => [styles.addTimeButton, pressed && styles.buttonPressed]}
+            onPress={handleAddTime}
+          >
             <Text style={styles.addTimeText}>Add time</Text>
           </Pressable>
         </View>
@@ -171,14 +190,27 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Pressable style={[styles.saveButton, !canSave && styles.saveButtonDisabled]} onPress={() => void handleSave()} disabled={!canSave}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.saveButton,
+          !canSave && styles.saveButtonDisabled,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() => void handleSave()}
+        disabled={!canSave}
+      >
         <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save medication'}</Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
   container: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
@@ -284,5 +316,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: typography.button,
     fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
   },
 });

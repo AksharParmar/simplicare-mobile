@@ -1,6 +1,16 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { RootStackParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
@@ -100,6 +110,7 @@ export function EditMedicationScreen({ route, navigation }: Props) {
           startDate,
         });
       }
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       navigation.navigate('MedicationDetail', { medicationId });
     } catch {
@@ -110,7 +121,12 @@ export function EditMedicationScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Edit medication</Text>
 
       <View style={styles.fieldWrap}>
@@ -145,7 +161,10 @@ export function EditMedicationScreen({ route, navigation }: Props) {
         <Text style={styles.label}>Dose times</Text>
         <View style={styles.timeRow}>
           <TextInput value={timeInput} onChangeText={setTimeInput} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" />
-          <Pressable style={styles.addTimeButton} onPress={addTime}>
+          <Pressable
+            style={({ pressed }) => [styles.addTimeButton, pressed && styles.buttonPressed]}
+            onPress={addTime}
+          >
             <Text style={styles.addTimeText}>Add time</Text>
           </Pressable>
         </View>
@@ -161,10 +180,19 @@ export function EditMedicationScreen({ route, navigation }: Props) {
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Pressable style={[styles.saveButton, !canSave && styles.saveButtonDisabled]} onPress={() => void handleSave()} disabled={!canSave}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.saveButton,
+          !canSave && styles.saveButtonDisabled,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() => void handleSave()}
+        disabled={!canSave}
+      >
         <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save changes'}</Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -280,5 +308,13 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: typography.button,
     fontWeight: '600',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  buttonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
   },
 });

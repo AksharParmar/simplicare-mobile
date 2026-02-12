@@ -4,6 +4,7 @@ import {
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
@@ -67,11 +68,37 @@ function AddHubTabButton({ onPress }: { onPress?: () => void }) {
 function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
   return (
     <Tab.Navigator
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
-      }}
+        tabBarActiveTintColor: '#0f172a',
+        tabBarInactiveTintColor: '#64748b',
+        tabBarIcon: ({ focused, color, size }) => {
+          if (route.name === 'AddHub') {
+            return null;
+          }
+
+          const iconName: keyof typeof Ionicons.glyphMap =
+            route.name === 'Home'
+              ? focused
+                ? 'home'
+                : 'home-outline'
+              : route.name === 'Medications'
+                ? focused
+                  ? 'medkit'
+                  : 'medkit-outline'
+                : route.name === 'Copilot'
+                  ? focused
+                    ? 'chatbubble-ellipses'
+                    : 'chatbubble-ellipses-outline'
+                  : focused
+                    ? 'settings'
+                    : 'settings-outline';
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
     >
       <Tab.Screen name="Home" component={TodayScreen} options={{ tabBarLabel: 'Home' }} />
       <Tab.Screen

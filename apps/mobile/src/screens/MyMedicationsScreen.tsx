@@ -2,7 +2,18 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +23,26 @@ import { radius, spacing, typography } from '../theme/tokens';
 import { formatHHMMTo12Hour, formatISOTo12Hour } from '../utils/timeFormat';
 
 type Props = BottomTabScreenProps<RootTabParamList, 'Medications'>;
+type SortOption = 'name' | 'nextDue' | 'recent';
+
+function getNextDueMinutes(times: string[]): number {
+  if (times.length === 0) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const minuteValues = times.map((time) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  });
+  const upcoming = minuteValues.filter((minutes) => minutes >= currentMinutes);
+  const nextValue = upcoming.length > 0 ? Math.min(...upcoming) : Math.min(...minuteValues);
+
+  return nextValue >= currentMinutes
+    ? nextValue - currentMinutes
+    : 24 * 60 - (currentMinutes - nextValue);
+}
 
 function formatNextTime(times: string[]): string {
   if (times.length === 0) {
@@ -36,6 +67,8 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
   const stackNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { state, deleteMedication } = useAppState();
   const [banner, setBanner] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('name');
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
 
   const schedulesByMedication = useMemo(() => {
@@ -62,6 +95,27 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
     [state.medications],
   );
 
+  const visibleMedications = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = state.medications.filter((medication) =>
+      medication.name.toLowerCase().includes(query),
+    );
+
+    return [...filtered].sort((a, b) => {
+      if (sortOption === 'recent') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      if (sortOption === 'nextDue') {
+        const aNext = getNextDueMinutes(schedulesByMedication.get(a.id) ?? []);
+        const bNext = getNextDueMinutes(schedulesByMedication.get(b.id) ?? []);
+        return aNext - bNext;
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+  }, [searchQuery, sortOption, state.medications, schedulesByMedication]);
+
   useEffect(() => {
     const flashMessage = route.params?.flashMessage;
     if (!flashMessage) {
@@ -84,6 +138,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           await deleteMedication(medicationId);
           navigation.setParams({
             flashMessage: `${medicationName} deleted`,
@@ -106,27 +161,79 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
+    >
+      <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Medications</Text>
-        <Pressable style={styles.addButton} onPress={() => stackNavigation.navigate('ManualAddMedication')}>
+        <Pressable
+          style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}
+          onPress={() => stackNavigation.navigate('ManualAddMedication')}
+        >
           <Text style={styles.addButtonText}>Add medication</Text>
         </Pressable>
       </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
 
-      {state.medications.length === 0 ? (
+      <View style={styles.controlsCard}>
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search medications"
+          placeholderTextColor="#94a3b8"
+          style={styles.searchInput}
+          returnKeyType="search"
+        />
+        <View style={styles.segmentedWrap}>
+          <Pressable
+            style={[styles.segmentedItem, sortOption === 'name' && styles.segmentedItemActive]}
+            onPress={() => setSortOption('name')}
+          >
+            <Text style={[styles.segmentedText, sortOption === 'name' && styles.segmentedTextActive]}>
+              A-Z
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentedItem, sortOption === 'nextDue' && styles.segmentedItemActive]}
+            onPress={() => setSortOption('nextDue')}
+          >
+            <Text style={[styles.segmentedText, sortOption === 'nextDue' && styles.segmentedTextActive]}>
+              Next due
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentedItem, sortOption === 'recent' && styles.segmentedItemActive]}
+            onPress={() => setSortOption('recent')}
+          >
+            <Text style={[styles.segmentedText, sortOption === 'recent' && styles.segmentedTextActive]}>
+              Recent
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {visibleMedications.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No medications yet</Text>
-          <Text style={styles.emptySubtitle}>Start by adding your first medication.</Text>
-          <Pressable style={styles.emptyButton} onPress={() => stackNavigation.navigate('ManualAddMedication')}>
+          <Text style={styles.emptyTitle}>{state.medications.length === 0 ? 'No medications yet' : 'No matches found'}</Text>
+          <Text style={styles.emptySubtitle}>
+            {state.medications.length === 0
+              ? 'Start by adding your first medication.'
+              : 'Try a different search or sort.'}
+          </Text>
+          <Pressable
+            style={({ pressed }) => [styles.emptyButton, pressed && styles.buttonPressed]}
+            onPress={() => stackNavigation.navigate('ManualAddMedication')}
+          >
             <Text style={styles.emptyButtonText}>Add medication</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {state.medications.map((medication) => {
+      {visibleMedications.map((medication) => {
         const allTimes = schedulesByMedication.get(medication.id) ?? [];
         return (
           <Swipeable
@@ -138,7 +245,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
             renderRightActions={() => renderDeleteAction(medication.id, medication.name)}
           >
             <Pressable
-              style={styles.card}
+              style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}
               onPress={() => stackNavigation.navigate('MedicationDetail', { medicationId: medication.id })}
             >
               <View style={styles.cardTopRow}>
@@ -149,7 +256,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
                 </View>
                 <View style={styles.cardActions}>
                   <Pressable
-                    style={styles.editPill}
+                    style={({ pressed }) => [styles.editPill, pressed && styles.buttonPressed]}
                     onPress={() => stackNavigation.navigate('EditMedication', { medicationId: medication.id })}
                   >
                     <Text style={styles.editPillText}>Edit</Text>
@@ -179,11 +286,16 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
           ))
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
   container: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
@@ -224,6 +336,50 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     fontSize: typography.body,
     fontWeight: '600',
+  },
+  controlsCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  searchInput: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    color: '#0f172a',
+    fontSize: typography.body,
+    backgroundColor: '#ffffff',
+    marginBottom: spacing.sm,
+  },
+  segmentedWrap: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  segmentedItem: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  segmentedItemActive: {
+    backgroundColor: '#0f172a',
+  },
+  segmentedText: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '700',
+  },
+  segmentedTextActive: {
+    color: '#ffffff',
   },
   emptyCard: {
     borderWidth: 1,
@@ -357,5 +513,9 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#64748b',
     textTransform: 'capitalize',
+  },
+  buttonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
 });

@@ -1,5 +1,6 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useEffect, useMemo, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -118,6 +119,7 @@ export function TodayScreen({ route, navigation }: Props) {
         scheduledAt: selectedDose.scheduledAt,
         status,
       });
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await refresh();
       setSelectedDose(null);
     } finally {
@@ -180,7 +182,10 @@ export function TodayScreen({ route, navigation }: Props) {
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No medications yet</Text>
           <Text style={styles.emptySubtitle}>Add your first medication to start reminders.</Text>
-          <Pressable style={styles.addButton} onPress={() => navigation.getParent()?.navigate('ManualAddMedication')}>
+          <Pressable
+            style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}
+            onPress={() => navigation.getParent()?.navigate('ManualAddMedication')}
+          >
             <Text style={styles.addButtonText}>Add medication</Text>
           </Pressable>
         </View>
@@ -195,7 +200,11 @@ export function TodayScreen({ route, navigation }: Props) {
 
       {!isLoading && hasAnyMedication
         ? dosesWithInstructions.map((dose) => (
-            <Pressable key={dose.id} style={styles.card} onPress={() => setSelectedDose(dose)}>
+            <Pressable
+              key={dose.id}
+              style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}
+              onPress={() => setSelectedDose(dose)}
+            >
               <View style={styles.cardTopRow}>
                 <Text style={styles.cardTitle}>{dose.medicationName}</Text>
                 <View style={[styles.badge, dose.isUpcoming ? styles.badgeUpcoming : styles.badgePast]}>
@@ -336,6 +345,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
+  },
+  buttonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
   },
   addButtonText: {
     color: '#ffffff',
