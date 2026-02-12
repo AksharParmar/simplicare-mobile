@@ -23,8 +23,10 @@ import {
 } from './src/notifications/notificationScheduler';
 import { ConfirmScannedMedicationScreen } from './src/screens/ConfirmScannedMedicationScreen';
 import { CopilotScreen } from './src/screens/CopilotScreen';
-import { HistoryScreen } from './src/screens/HistoryScreen';
+import { EditMedicationScreen } from './src/screens/EditMedicationScreen';
 import { ManualAddMedicationScreen } from './src/screens/ManualAddMedicationScreen';
+import { MedicationDetailScreen } from './src/screens/MedicationDetailScreen';
+import { MyMedicationsScreen } from './src/screens/MyMedicationsScreen';
 import { ScanAddMedicationScreen } from './src/screens/ScanAddMedicationScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
@@ -72,7 +74,7 @@ function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
       }}
     >
       <Tab.Screen name="Home" component={TodayScreen} options={{ tabBarLabel: 'Home' }} />
-      <Tab.Screen name="History" component={HistoryScreen} options={{ tabBarLabel: 'History' }} />
+      <Tab.Screen name="Medications" component={MyMedicationsScreen} options={{ tabBarLabel: 'Medications' }} />
       <Tab.Screen
         name="AddHub"
         component={AddHubPlaceholder}
@@ -210,6 +212,16 @@ function AppShell() {
             name="ConfirmScannedMedication"
             component={ConfirmScannedMedicationScreen}
             options={{ title: 'Confirm Scan' }}
+          />
+          <Stack.Screen
+            name="MedicationDetail"
+            component={MedicationDetailScreen}
+            options={{ title: 'Medication' }}
+          />
+          <Stack.Screen
+            name="EditMedication"
+            component={EditMedicationScreen}
+            options={{ title: 'Edit Medication' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

@@ -10,15 +10,20 @@ export type HomeRouteParams =
     }
   | undefined;
 
+export type MedicationsRouteParams =
+  | {
+      flashMessage?: string;
+      openedAt?: number;
+    }
+  | undefined;
+
 export type RootTabParamList = {
   Home: HomeRouteParams;
-  History: undefined;
+  Medications: MedicationsRouteParams;
   AddHub: undefined;
   Copilot: undefined;
   Settings: undefined;
 };
-
-export type ScreenName = keyof RootTabParamList;
 
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<RootTabParamList> | undefined;
@@ -28,5 +33,11 @@ export type RootStackParamList = {
     imageUri?: string;
     rawText: string;
     ocrError?: string;
+  };
+  MedicationDetail: {
+    medicationId: string;
+  };
+  EditMedication: {
+    medicationId: string;
   };
 };

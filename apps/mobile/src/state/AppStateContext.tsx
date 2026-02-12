@@ -7,12 +7,18 @@ import {
   addMedication as addMedicationToStore,
   addSchedule as addScheduleToStore,
   AppState,
+  deleteMedication as deleteMedicationInStore,
+  deleteSchedule as deleteScheduleInStore,
   loadState,
   seedIfEmpty,
+  updateMedication as updateMedicationInStore,
+  updateSchedule as updateScheduleInStore,
 } from '../storage/localStore';
 
 type AddMedicationInput = Omit<Medication, 'id' | 'createdAt'>;
 type AddScheduleInput = Omit<Schedule, 'id' | 'createdAt'>;
+type UpdateMedicationInput = Partial<Omit<Medication, 'id' | 'createdAt'>>;
+type UpdateScheduleInput = Partial<Omit<Schedule, 'id' | 'medicationId' | 'createdAt'>>;
 type AddDoseLogInput = {
   medicationId: string;
   scheduledAt: string;
@@ -27,6 +33,10 @@ type AppStateContextValue = {
   addMedication: (input: AddMedicationInput) => Promise<Medication>;
   addSchedule: (input: AddScheduleInput) => Promise<Schedule>;
   addDoseLog: (input: AddDoseLogInput) => Promise<void>;
+  updateMedication: (id: string, patch: UpdateMedicationInput) => Promise<Medication | null>;
+  updateSchedule: (id: string, patch: UpdateScheduleInput) => Promise<Schedule | null>;
+  deleteMedication: (id: string) => Promise<void>;
+  deleteSchedule: (id: string) => Promise<void>;
 };
 
 const EMPTY_STATE: AppState = {
@@ -107,6 +117,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setState(next);
   }, []);
 
+  const updateMedication = useCallback(async (id: string, patch: UpdateMedicationInput) => {
+    const next = await updateMedicationInStore(id, patch);
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+    return next.medications.find((medication) => medication.id === id) ?? null;
+  }, []);
+
+  const updateSchedule = useCallback(async (id: string, patch: UpdateScheduleInput) => {
+    const next = await updateScheduleInStore(id, patch);
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+    return next.schedules.find((schedule) => schedule.id === id) ?? null;
+  }, []);
+
+  const deleteMedication = useCallback(async (id: string) => {
+    const next = await deleteMedicationInStore(id);
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+  }, []);
+
+  const deleteSchedule = useCallback(async (id: string) => {
+    const next = await deleteScheduleInStore(id);
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+  }, []);
+
   const value = useMemo(
     () => ({
       state,
@@ -115,8 +151,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addMedication,
       addSchedule,
       addDoseLog,
+      updateMedication,
+      updateSchedule,
+      deleteMedication,
+      deleteSchedule,
     }),
-    [state, isLoading, refresh, addMedication, addSchedule, addDoseLog],
+    [
+      state,
+      isLoading,
+      refresh,
+      addMedication,
+      addSchedule,
+      addDoseLog,
+      updateMedication,
+      updateSchedule,
+      deleteMedication,
+      deleteSchedule,
+    ],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

@@ -98,9 +98,7 @@ export async function saveState(state: AppState): Promise<void> {
 export async function seedIfEmpty(): Promise<AppState> {
   const state = await loadState();
   const hasData =
-    state.medications.length > 0 ||
-    state.schedules.length > 0 ||
-    state.doseLogs.length > 0;
+    state.medications.length > 0 || state.schedules.length > 0 || state.doseLogs.length > 0;
 
   if (hasData) {
     return state;
@@ -136,6 +134,57 @@ export async function addDoseLog(log: DoseLog): Promise<AppState> {
   const next = {
     ...state,
     doseLogs: [...state.doseLogs, log],
+  };
+  await saveState(next);
+  return next;
+}
+
+export async function updateMedication(
+  id: string,
+  patch: Partial<Omit<Medication, 'id' | 'createdAt'>>,
+): Promise<AppState> {
+  const state = await loadState();
+  const next = {
+    ...state,
+    medications: state.medications.map((medication) =>
+      medication.id === id ? { ...medication, ...patch } : medication,
+    ),
+  };
+  await saveState(next);
+  return next;
+}
+
+export async function updateSchedule(
+  id: string,
+  patch: Partial<Omit<Schedule, 'id' | 'medicationId' | 'createdAt'>>,
+): Promise<AppState> {
+  const state = await loadState();
+  const next = {
+    ...state,
+    schedules: state.schedules.map((schedule) =>
+      schedule.id === id ? { ...schedule, ...patch } : schedule,
+    ),
+  };
+  await saveState(next);
+  return next;
+}
+
+export async function deleteMedication(id: string): Promise<AppState> {
+  const state = await loadState();
+  const next = {
+    medications: state.medications.filter((medication) => medication.id !== id),
+    schedules: state.schedules.filter((schedule) => schedule.medicationId !== id),
+    doseLogs: state.doseLogs.filter((log) => log.medicationId !== id),
+  };
+  await saveState(next);
+  return next;
+}
+
+export async function deleteSchedule(id: string): Promise<AppState> {
+  const state = await loadState();
+  const next = {
+    ...state,
+    schedules: state.schedules.filter((schedule) => schedule.id !== id),
   };
   await saveState(next);
   return next;
