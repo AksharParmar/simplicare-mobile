@@ -1,3 +1,4 @@
+import { BlurView } from 'expo-blur';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { radius, spacing, typography } from '../theme/tokens';
@@ -8,6 +9,7 @@ type Props = {
   scheduledTime: string;
   instructions?: string;
   loading: boolean;
+  snoozeMinutes: 5 | 10 | 15;
   onClose: () => void;
   onMarkTaken: () => void;
   onSkip: () => void;
@@ -20,6 +22,7 @@ export function DoseActionSheet({
   scheduledTime,
   instructions,
   loading,
+  snoozeMinutes,
   onClose,
   onMarkTaken,
   onSkip,
@@ -28,27 +31,29 @@ export function DoseActionSheet({
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => undefined}>
-          <Text style={styles.title}>{medicationName}</Text>
-          <Text style={styles.time}>Scheduled for {scheduledTime}</Text>
-          {instructions ? <Text style={styles.instructions}>{instructions}</Text> : null}
+        <BlurView intensity={42} tint="light" style={styles.sheet}>
+          <Pressable onPress={() => undefined}>
+            <Text style={styles.title}>{medicationName}</Text>
+            <Text style={styles.time}>Scheduled for {scheduledTime}</Text>
+            {instructions ? <Text style={styles.instructions}>{instructions}</Text> : null}
 
-          <Pressable
-            style={[styles.button, styles.primaryButton]}
-            onPress={onMarkTaken}
-            disabled={loading}
-          >
-            <Text style={styles.primaryButtonText}>{loading ? 'Saving...' : 'Mark Taken'}</Text>
-          </Pressable>
+            <Pressable
+              style={[styles.button, styles.primaryButton]}
+              onPress={onMarkTaken}
+              disabled={loading}
+            >
+              <Text style={styles.primaryButtonText}>{loading ? 'Saving...' : 'Mark Taken'}</Text>
+            </Pressable>
 
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={onSkip} disabled={loading}>
-            <Text style={styles.secondaryButtonText}>Skip</Text>
-          </Pressable>
+            <Pressable style={[styles.button, styles.secondaryButton]} onPress={onSkip} disabled={loading}>
+              <Text style={styles.secondaryButtonText}>Skip</Text>
+            </Pressable>
 
-          <Pressable style={[styles.button, styles.tertiaryButton]} onPress={onSnooze} disabled={loading}>
-            <Text style={styles.tertiaryButtonText}>Snooze 10 min</Text>
+            <Pressable style={[styles.button, styles.tertiaryButton]} onPress={onSnooze} disabled={loading}>
+              <Text style={styles.tertiaryButtonText}>Snooze {snoozeMinutes} min</Text>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </BlurView>
       </Pressable>
     </Modal>
   );
@@ -61,11 +66,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.22)',
   },
   sheet: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: 'rgba(203, 213, 225, 0.8)',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,

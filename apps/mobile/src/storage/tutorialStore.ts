@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const TUTORIAL_SEEN_KEY = 'simplicare_has_seen_tutorial_v1';
+export const TUTORIAL_SEEN_KEY = 'simplicare_has_seen_tutorial_v1';
 
 export async function hasSeenTutorial(): Promise<boolean> {
   const raw = await AsyncStorage.getItem(TUTORIAL_SEEN_KEY);

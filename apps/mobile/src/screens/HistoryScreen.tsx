@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { formatISOTo12Hour } from '../utils/timeFormat';
 
 export function HistoryScreen() {
   const { state, isLoading } = useAppState();
@@ -36,7 +37,7 @@ export function HistoryScreen() {
                 {medicationNameById.get(log.medicationId) ?? 'Unknown medication'}
               </Text>
               <Text style={styles.cardStatus}>Status: {log.status}</Text>
-              <Text style={styles.cardDate}>Scheduled: {new Date(log.scheduledAt).toLocaleString()}</Text>
+              <Text style={styles.cardDate}>Scheduled: {formatISOTo12Hour(log.scheduledAt)}</Text>
             </View>
           ))
         : null}

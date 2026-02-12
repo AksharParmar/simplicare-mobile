@@ -1,3 +1,4 @@
+import { BlurView } from 'expo-blur';
 import { useEffect, useRef } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -39,20 +40,22 @@ export function AddHubActionSheet({ visible, onClose, onScanLabel, onAddManual }
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Animated.View style={[styles.popup, { opacity, transform: [{ scale }] }]}>
-          <Text style={styles.title}>Add medication</Text>
+        <Animated.View style={[styles.popupWrap, { opacity, transform: [{ scale }] }]}>
+          <BlurView intensity={45} tint="light" style={styles.popup}>
+            <Text style={styles.title}>Add medication</Text>
 
-          <Pressable style={styles.optionButton} onPress={onScanLabel}>
-            <Text style={styles.optionText}>Scan label</Text>
-          </Pressable>
+            <Pressable style={styles.optionButton} onPress={onScanLabel}>
+              <Text style={styles.optionText}>Scan label</Text>
+            </Pressable>
 
-          <Pressable style={styles.optionButton} onPress={onAddManual}>
-            <Text style={styles.optionText}>Add manually</Text>
-          </Pressable>
+            <Pressable style={styles.optionButton} onPress={onAddManual}>
+              <Text style={styles.optionText}>Add manually</Text>
+            </Pressable>
 
-          <Pressable style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
+            <Pressable style={styles.cancelButton} onPress={onClose}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
+          </BlurView>
         </Animated.View>
       </Pressable>
     </Modal>
@@ -62,25 +65,24 @@ export function AddHubActionSheet({ visible, onClose, onScanLabel, onAddManual }
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.2)',
+    backgroundColor: 'rgba(15, 23, 42, 0.16)',
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 112,
     paddingHorizontal: spacing.lg,
   },
-  popup: {
+  popupWrap: {
     width: '100%',
     maxWidth: 320,
-    backgroundColor: '#ffffff',
-    borderRadius: radius.lg,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  popup: {
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'rgba(148, 163, 184, 0.28)',
     padding: spacing.md,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.82)',
   },
   title: {
     fontSize: typography.body,
@@ -92,8 +94,8 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#dbe2ea',
-    backgroundColor: '#ffffff',
+    borderColor: 'rgba(203, 213, 225, 0.9)',
+    backgroundColor: 'rgba(255,255,255,0.75)',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
@@ -106,7 +108,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     minHeight: 48,
     borderRadius: radius.md,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'rgba(241, 245, 249, 0.92)',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.xs,

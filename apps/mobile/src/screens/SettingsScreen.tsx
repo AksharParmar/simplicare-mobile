@@ -1,14 +1,36 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  cancelAllMedicationNotifications,
+  rescheduleAllMedicationNotifications,
+} from '../notifications/notificationScheduler';
+import { useAppState } from '../state/AppStateContext';
 import { usePreferences } from '../state/PreferencesContext';
-import { resetTutorialFlag } from '../storage/tutorialStore';
+import { STORE_KEY } from '../storage/localStore';
+import { PREFS_KEY } from '../storage/preferencesStore';
+import { resetTutorialFlag, TUTORIAL_SEEN_KEY } from '../storage/tutorialStore';
 import { radius, spacing, typography } from '../theme/tokens';
+
+const SNOOZE_OPTIONS: Array<5 | 10 | 15> = [5, 10, 15];
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { state, resetState } = useAppState();
   const { prefs, updatePrefs } = usePreferences();
 
   const [isNameModalVisible, setIsNameModalVisible] = useState(false);
@@ -26,8 +48,76 @@ export function SettingsScreen() {
     setIsNameModalVisible(false);
   }
 
+  async function handleToggleReminders(next: boolean) {
+    await updatePrefs({ remindersEnabled: next });
+
+    if (next) {
+      await rescheduleAllMedicationNotifications(state);
+      return;
+    }
+
+    await cancelAllMedicationNotifications();
+  }
+
+  async function handleSelectSnooze(minutes: 5 | 10 | 15) {
+    await updatePrefs({ defaultSnoozeMinutes: minutes });
+  }
+
+  async function handleExportData() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      medications: state.medications,
+      schedules: state.schedules,
+      doseLogs: state.doseLogs,
+      preferences: prefs,
+    };
+
+    await Share.share({
+      title: 'SimpliCare data export',
+      message: JSON.stringify(payload, null, 2),
+    });
+  }
+
+  function confirmDeleteAllData() {
+    Alert.alert(
+      'Delete all local data?',
+      'This removes medications, schedules, logs, preferences, and tutorial state from this device.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete all',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              await cancelAllMedicationNotifications();
+              await AsyncStorage.multiRemove([
+                STORE_KEY,
+                PREFS_KEY,
+                TUTORIAL_SEEN_KEY,
+                'simplicare_has_seen_welcome_v1',
+              ]);
+              await resetState();
+              await updatePrefs({
+                displayName: '',
+                remindersEnabled: true,
+                defaultSnoozeMinutes: 10,
+              });
+
+              Alert.alert('Data cleared', 'Your app is reset to a clean local state.');
+            })();
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleShowTutorialAgain() {
+    await resetTutorialFlag();
+    Alert.alert('Tutorial reset', 'Quick start will appear next app launch.');
+  }
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.title}>Settings</Text>
 
       <View style={styles.sectionCard}>
@@ -44,29 +134,63 @@ export function SettingsScreen() {
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Reminders</Text>
         <View style={styles.rowStatic}>
-          <Text style={styles.rowLabel}>Notification schedule</Text>
-          <Text style={styles.rowValue}>Enabled</Text>
+          <Text style={styles.rowLabel}>Reminders enabled</Text>
+          <Switch
+            value={prefs.remindersEnabled}
+            onValueChange={(next) => {
+              void handleToggleReminders(next);
+            }}
+            trackColor={{ false: '#cbd5e1', true: '#bfdbfe' }}
+            thumbColor={prefs.remindersEnabled ? '#2563eb' : '#ffffff'}
+          />
         </View>
+
+        <View style={styles.snoozeWrap}>
+          <Text style={styles.rowLabel}>Default snooze</Text>
+          <View style={styles.segmentedWrap}>
+            {SNOOZE_OPTIONS.map((minutes) => {
+              const active = prefs.defaultSnoozeMinutes === minutes;
+              return (
+                <Pressable
+                  key={minutes}
+                  style={[styles.segmentedItem, active && styles.segmentedItemActive]}
+                  onPress={() => {
+                    void handleSelectSnooze(minutes);
+                  }}
+                >
+                  <Text style={[styles.segmentedLabel, active && styles.segmentedLabelActive]}>
+                    {minutes} min
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         <View style={styles.rowStatic}>
-          <Text style={styles.rowLabel}>Snooze duration</Text>
-          <Text style={styles.rowValue}>10 minutes</Text>
+          <Text style={styles.rowLabel}>Quiet hours</Text>
+          <Text style={styles.rowValue}>Coming soon</Text>
         </View>
       </View>
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Privacy & Data</Text>
-        <Pressable style={styles.row} onPress={() => void resetTutorialFlag()}>
-          <Text style={styles.rowLabel}>Reset tutorial</Text>
+        <Pressable style={styles.row} onPress={() => void handleExportData()}>
+          <Text style={styles.rowLabel}>Export my data</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
-        <View style={styles.rowStatic}>
-          <Text style={styles.rowLabel}>Export data</Text>
-          <Text style={styles.rowValue}>Coming soon</Text>
-        </View>
-        <View style={styles.rowStatic}>
-          <Text style={styles.rowLabel}>Delete local data</Text>
-          <Text style={styles.rowValue}>Coming soon</Text>
-        </View>
+        <Pressable style={styles.row} onPress={confirmDeleteAllData}>
+          <Text style={[styles.rowLabel, styles.destructiveLabel]}>Delete all local data</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Help</Text>
+        <Pressable style={styles.row} onPress={() => void handleShowTutorialAgain()}>
+          <Text style={styles.rowLabel}>Show tutorial again</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
       </View>
 
       <View style={styles.sectionCard}>
@@ -105,14 +229,14 @@ export function SettingsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
     backgroundColor: '#f8fafc',
   },
   title: {
@@ -142,7 +266,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   rowStatic: {
-    minHeight: 44,
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -164,6 +288,38 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#94a3b8',
     marginTop: -2,
+  },
+  destructiveLabel: {
+    color: '#b91c1c',
+  },
+  snoozeWrap: {
+    paddingVertical: spacing.xs,
+  },
+  segmentedWrap: {
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  segmentedItem: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  segmentedItemActive: {
+    backgroundColor: '#0f172a',
+  },
+  segmentedLabel: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '700',
+  },
+  segmentedLabelActive: {
+    color: '#ffffff',
   },
   aboutText: {
     fontSize: typography.caption,

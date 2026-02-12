@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { RootStackParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { formatHHMMTo12Hour } from '../utils/timeFormat';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManualAddMedication'>;
 
@@ -124,10 +125,11 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
         <TextInput
           value={strength}
           onChangeText={setStrength}
-          placeholder="Optional"
+          placeholder="e.g., 10 mg, 500 mg, 20 mcg, 5 mL"
           style={styles.input}
           autoCapitalize="none"
         />
+        <Text style={styles.helperText}>What&apos;s printed on the label (dose strength).</Text>
       </View>
 
       <View style={styles.fieldWrap}>
@@ -135,10 +137,11 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
         <TextInput
           value={instructions}
           onChangeText={setInstructions}
-          placeholder="Optional"
+          placeholder="Any extra instructions? e.g., Take with food, Take at bedtime"
           style={[styles.input, styles.multiline]}
           multiline
         />
+        <Text style={styles.helperText}>Optional notes you want to remember.</Text>
       </View>
 
       <View style={styles.fieldWrap}>
@@ -160,7 +163,7 @@ export function ManualAddMedicationScreen({ navigation }: Props) {
         <View style={styles.chipWrap}>
           {times.map((time) => (
             <Pressable key={time} style={styles.chip} onPress={() => removeTime(time)}>
-              <Text style={styles.chipText}>{time}  ×</Text>
+              <Text style={styles.chipText}>{formatHHMMTo12Hour(time)}  ×</Text>
             </Pressable>
           ))}
         </View>
@@ -210,6 +213,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     fontSize: typography.body,
     color: '#0f172a',
+  },
+  helperText: {
+    fontSize: typography.caption,
+    color: '#64748b',
+    marginTop: spacing.xs,
   },
   multiline: {
     minHeight: 92,

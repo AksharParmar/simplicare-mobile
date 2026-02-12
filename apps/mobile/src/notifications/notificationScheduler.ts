@@ -60,6 +60,9 @@ export async function scheduleMedicationNotificationsFromState(state: AppState):
   }
 
   const prefs = await loadPreferences();
+  if (!prefs.remindersEnabled) {
+    return;
+  }
 
   for (const schedule of state.schedules) {
     const medication = state.medications.find((med) => med.id === schedule.medicationId);
@@ -105,6 +108,7 @@ export async function scheduleSnoozeNotification(input: {
   strength?: string;
   scheduleId: string;
   originalTimeHHMM: string;
+  snoozeMinutes?: 5 | 10 | 15;
 }): Promise<void> {
   const granted = await requestNotificationPermissions();
   if (!granted) {
@@ -112,7 +116,12 @@ export async function scheduleSnoozeNotification(input: {
   }
 
   const prefs = await loadPreferences();
-  const snoozedAt = new Date(Date.now() + 10 * 60 * 1000);
+  if (!prefs.remindersEnabled) {
+    return;
+  }
+
+  const snoozeMinutes = input.snoozeMinutes ?? prefs.defaultSnoozeMinutes;
+  const snoozedAt = new Date(Date.now() + snoozeMinutes * 60 * 1000);
 
   await Notifications.scheduleNotificationAsync({
     content: {

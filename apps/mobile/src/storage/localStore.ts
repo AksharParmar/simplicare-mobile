@@ -8,7 +8,7 @@ export type AppState = {
   doseLogs: DoseLog[];
 };
 
-const STORE_KEY = 'simplicare_v1';
+export const STORE_KEY = 'simplicare_v1';
 
 const EMPTY_STATE: AppState = {
   medications: [],
@@ -36,6 +36,11 @@ export async function loadState(): Promise<AppState> {
 
 export async function saveState(state: AppState): Promise<void> {
   await AsyncStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+
+export async function clearState(): Promise<AppState> {
+  await AsyncStorage.removeItem(STORE_KEY);
+  return EMPTY_STATE;
 }
 
 export async function seedIfEmpty(): Promise<AppState> {

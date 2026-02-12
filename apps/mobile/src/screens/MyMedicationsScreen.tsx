@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, RootTabParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { formatHHMMTo12Hour, formatISOTo12Hour } from '../utils/timeFormat';
 
 type Props = BottomTabScreenProps<RootTabParamList, 'Medications'>;
 
@@ -27,11 +28,7 @@ function formatNextTime(times: string[]): string {
   });
 
   const nextTime = upcoming ?? sortedTimes[0];
-  const [hour, minute] = nextTime.split(':').map(Number);
-  const date = new Date();
-  date.setHours(hour, minute, 0, 0);
-
-  return `Next: ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  return `Next: ${formatHHMMTo12Hour(nextTime)}`;
 }
 
 export function MyMedicationsScreen({ navigation, route }: Props) {
@@ -176,7 +173,7 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
                 {medicationNameById.get(log.medicationId) ?? 'Unknown medication'}
               </Text>
               <Text style={styles.logMeta}>
-                {log.status} · {new Date(log.scheduledAt).toLocaleString()}
+                {log.status} · {formatISOTo12Hour(log.scheduledAt)}
               </Text>
             </View>
           ))

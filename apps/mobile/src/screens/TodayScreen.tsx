@@ -13,6 +13,7 @@ import {
 import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { formatHHMMTo12Hour } from '../utils/timeFormat';
 import {
   getCompletedDoseKeySetForToday,
   getDoseKeyFromInstance,
@@ -137,6 +138,7 @@ export function TodayScreen({ route, navigation }: Props) {
         strength: selectedDose.strength,
         scheduleId: selectedDose.scheduleId,
         originalTimeHHMM: selectedDose.timeLabel,
+        snoozeMinutes: prefs.defaultSnoozeMinutes,
       });
       setSelectedDose(null);
     } finally {
@@ -200,7 +202,7 @@ export function TodayScreen({ route, navigation }: Props) {
                   <Text style={styles.badgeText}>{dose.isUpcoming ? 'Upcoming' : 'Past'}</Text>
                 </View>
               </View>
-              <Text style={styles.cardTime}>{dose.timeLabel}</Text>
+              <Text style={styles.cardTime}>{formatHHMMTo12Hour(dose.timeLabel)}</Text>
               <Text style={styles.cardHint}>Tap for actions</Text>
             </Pressable>
           ))
@@ -218,9 +220,10 @@ export function TodayScreen({ route, navigation }: Props) {
       <DoseActionSheet
         visible={Boolean(selectedDose)}
         medicationName={selectedDose?.medicationName ?? ''}
-        scheduledTime={selectedDose?.timeLabel ?? ''}
+        scheduledTime={selectedDose ? formatHHMMTo12Hour(selectedDose.timeLabel) : ''}
         instructions={selectedDose?.instructions}
         loading={submitting}
+        snoozeMinutes={prefs.defaultSnoozeMinutes}
         onClose={() => setSelectedDose(null)}
         onMarkTaken={() => void handleLog('taken')}
         onSkip={() => void handleLog('skipped')}

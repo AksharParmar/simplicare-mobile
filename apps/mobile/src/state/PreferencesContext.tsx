@@ -1,8 +1,10 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
+  DEFAULT_PREFS,
   loadPreferences,
   Preferences,
+  resetPreferences,
   updatePreferences as updatePreferencesInStore,
 } from '../storage/preferencesStore';
 
@@ -11,10 +13,7 @@ type PreferencesContextValue = {
   isLoadingPrefs: boolean;
   refreshPrefs: () => Promise<void>;
   updatePrefs: (partial: Partial<Preferences>) => Promise<void>;
-};
-
-const DEFAULT_PREFS: Preferences = {
-  displayName: '',
+  resetPrefs: () => Promise<void>;
 };
 
 const PreferencesContext = createContext<PreferencesContextValue | undefined>(undefined);
@@ -33,6 +32,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     setPrefs(updated);
   }, []);
 
+  const resetPrefsState = useCallback(async () => {
+    const reset = await resetPreferences();
+    setPrefs(reset);
+  }, []);
+
   useEffect(() => {
     async function bootstrapPrefs() {
       const loaded = await loadPreferences();
@@ -49,8 +53,9 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       isLoadingPrefs,
       refreshPrefs,
       updatePrefs,
+      resetPrefs: resetPrefsState,
     }),
-    [prefs, isLoadingPrefs, refreshPrefs, updatePrefs],
+    [prefs, isLoadingPrefs, refreshPrefs, updatePrefs, resetPrefsState],
   );
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;

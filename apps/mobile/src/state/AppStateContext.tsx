@@ -11,6 +11,7 @@ import {
   deleteSchedule as deleteScheduleInStore,
   loadState,
   seedIfEmpty,
+  clearState as clearStateInStore,
   updateMedication as updateMedicationInStore,
   updateSchedule as updateScheduleInStore,
 } from '../storage/localStore';
@@ -37,6 +38,7 @@ type AppStateContextValue = {
   updateSchedule: (id: string, patch: UpdateScheduleInput) => Promise<Schedule | null>;
   deleteMedication: (id: string) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
+  resetState: () => Promise<void>;
 };
 
 const EMPTY_STATE: AppState = {
@@ -143,6 +145,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     await rescheduleAllMedicationNotifications(next);
   }, []);
 
+  const resetState = useCallback(async () => {
+    const next = await clearStateInStore();
+    setState(next);
+    await rescheduleAllMedicationNotifications(next);
+  }, []);
+
   const value = useMemo(
     () => ({
       state,
@@ -155,6 +163,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateSchedule,
       deleteMedication,
       deleteSchedule,
+      resetState,
     }),
     [
       state,
@@ -167,6 +176,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateSchedule,
       deleteMedication,
       deleteSchedule,
+      resetState,
     ],
   );
 

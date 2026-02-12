@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../navigation/types';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { formatHHMMTo12Hour, formatISOTo12Hour } from '../utils/timeFormat';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicationDetail'>;
 
@@ -69,7 +70,7 @@ export function MedicationDetailScreen({ route, navigation }: Props) {
               .sort()
               .map((time, index) => (
                 <View key={`${time}_${index}`} style={styles.chip}>
-                  <Text style={styles.chipText}>{time}</Text>
+                  <Text style={styles.chipText}>{formatHHMMTo12Hour(time)}</Text>
                 </View>
               ))
           )}
@@ -84,7 +85,7 @@ export function MedicationDetailScreen({ route, navigation }: Props) {
           logs.map((log) => (
             <View key={log.id} style={styles.logRow}>
               <Text style={styles.logStatus}>Status: {log.status}</Text>
-              <Text style={styles.logDate}>Scheduled: {new Date(log.scheduledAt).toLocaleString()}</Text>
+              <Text style={styles.logDate}>Scheduled: {formatISOTo12Hour(log.scheduledAt)}</Text>
             </View>
           ))
         )}
