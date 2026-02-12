@@ -25,6 +25,7 @@ type Props = BottomTabScreenProps<RootTabParamList, 'Home'>;
 
 type ActiveDose = TodayDoseInstance & {
   instructions?: string;
+  strength?: string;
 };
 
 export function TodayScreen({ route, navigation }: Props) {
@@ -42,6 +43,8 @@ export function TodayScreen({ route, navigation }: Props) {
     () => new Map(state.medications.map((medication) => [medication.id, medication])),
     [state.medications],
   );
+
+  const hasAnyMedication = state.medications.length > 0;
 
   const allDosesForToday = useMemo(() => getTodayDoseInstances(state, new Date()), [state]);
 
@@ -62,6 +65,7 @@ export function TodayScreen({ route, navigation }: Props) {
         .map((dose) => ({
           ...dose,
           instructions: medicationById.get(dose.medicationId)?.instructions,
+          strength: medicationById.get(dose.medicationId)?.strength,
         })),
     [allDosesForToday, completedDoseKeys, medicationById],
   );
@@ -130,6 +134,7 @@ export function TodayScreen({ route, navigation }: Props) {
       await scheduleSnoozeNotification({
         medicationId: selectedDose.medicationId,
         medicationName: selectedDose.medicationName,
+        strength: selectedDose.strength,
         scheduleId: selectedDose.scheduleId,
         originalTimeHHMM: selectedDose.timeLabel,
       });
@@ -169,14 +174,24 @@ export function TodayScreen({ route, navigation }: Props) {
 
       {isLoading ? <ActivityIndicator style={styles.loader} /> : null}
 
-      {!isLoading && dosesWithInstructions.length === 0 ? (
+      {!isLoading && !hasAnyMedication ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No medications yet</Text>
+          <Text style={styles.emptySubtitle}>Add your first medication to start reminders.</Text>
+          <Pressable style={styles.addButton} onPress={() => navigation.getParent()?.navigate('ManualAddMedication')}>
+            <Text style={styles.addButtonText}>Add medication</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {!isLoading && hasAnyMedication && dosesWithInstructions.length === 0 ? (
         <View style={styles.doneCard}>
           <Text style={styles.doneTitle}>All done for today 🎉</Text>
           <Text style={styles.doneSubtitle}>Your logs are saved in Medications.</Text>
         </View>
       ) : null}
 
-      {!isLoading
+      {!isLoading && hasAnyMedication
         ? dosesWithInstructions.map((dose) => (
             <Pressable key={dose.id} style={styles.card} onPress={() => setSelectedDose(dose)}>
               <View style={styles.cardTopRow}>
@@ -291,6 +306,38 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginBottom: spacing.md,
+  },
+  emptyCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: typography.subtitle,
+    color: '#0f172a',
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: typography.body,
+    color: '#64748b',
+    marginBottom: spacing.sm,
+  },
+  addButton: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: typography.body,
+    fontWeight: '600',
   },
   doneCard: {
     borderWidth: 1,

@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 
+import { loadPreferences } from '../storage/preferencesStore';
 import { AppState } from '../storage/localStore';
 
 export const MEDICATION_NOTIFICATION_TAG = 'simplicare-medication-reminder';
@@ -18,6 +19,15 @@ function parseHHMM(time: string): { hour: number; minute: number } | null {
   }
 
   return { hour, minute };
+}
+
+function formatReminderBody(displayName: string, medName: string, strength?: string): string {
+  const medLabel = strength ? `${medName} ${strength}` : medName;
+  if (displayName.trim()) {
+    return `Hi ${displayName.trim()}, time to take ${medLabel}.`;
+  }
+
+  return `Time to take ${medLabel}.`;
 }
 
 export async function requestNotificationPermissions(): Promise<boolean> {
@@ -49,6 +59,8 @@ export async function scheduleMedicationNotificationsFromState(state: AppState):
     return;
   }
 
+  const prefs = await loadPreferences();
+
   for (const schedule of state.schedules) {
     const medication = state.medications.find((med) => med.id === schedule.medicationId);
     const medicationName = medication?.name ?? 'Medication';
@@ -62,7 +74,7 @@ export async function scheduleMedicationNotificationsFromState(state: AppState):
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Medication reminder',
-          body: `${medicationName} at ${time}`,
+          body: formatReminderBody(prefs.displayName, medicationName, medication?.strength),
           data: {
             type: 'doseReminder',
             tag: MEDICATION_NOTIFICATION_TAG,
@@ -90,6 +102,7 @@ export async function rescheduleAllMedicationNotifications(state: AppState): Pro
 export async function scheduleSnoozeNotification(input: {
   medicationId: string;
   medicationName: string;
+  strength?: string;
   scheduleId: string;
   originalTimeHHMM: string;
 }): Promise<void> {
@@ -98,12 +111,13 @@ export async function scheduleSnoozeNotification(input: {
     return;
   }
 
+  const prefs = await loadPreferences();
   const snoozedAt = new Date(Date.now() + 10 * 60 * 1000);
 
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Snoozed reminder',
-      body: `${input.medicationName} is due now`,
+      body: formatReminderBody(prefs.displayName, input.medicationName, input.strength),
       data: {
         type: 'doseSnooze',
         tag: MEDICATION_NOTIFICATION_TAG,

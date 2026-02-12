@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePreferences } from '../state/PreferencesContext';
-import { resetWelcomeModalFlag } from '../storage/welcomeModalStorage';
+import { resetTutorialFlag } from '../storage/tutorialStore';
 import { radius, spacing, typography } from '../theme/tokens';
 
 export function SettingsScreen() {
@@ -55,8 +55,8 @@ export function SettingsScreen() {
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Privacy & Data</Text>
-        <Pressable style={styles.row} onPress={() => void resetWelcomeModalFlag()}>
-          <Text style={styles.rowLabel}>Reset welcome modal</Text>
+        <Pressable style={styles.row} onPress={() => void resetTutorialFlag()}>
+          <Text style={styles.rowLabel}>Reset tutorial</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
         <View style={styles.rowStatic}>
@@ -75,10 +75,17 @@ export function SettingsScreen() {
           <Text style={styles.rowLabel}>Version</Text>
           <Text style={styles.rowValue}>{appVersion}</Text>
         </View>
-        <Text style={styles.aboutText}>SimpliCare keeps medication management local-first and privacy friendly.</Text>
+        <Text style={styles.aboutText}>
+          SimpliCare keeps medication management local-first and privacy friendly.
+        </Text>
       </View>
 
-      <Modal visible={isNameModalVisible} animationType="slide" transparent onRequestClose={() => setIsNameModalVisible(false)}>
+      <Modal
+        visible={isNameModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsNameModalVisible(false)}
+      >
         <Pressable style={styles.modalBackdrop} onPress={() => setIsNameModalVisible(false)}>
           <Pressable style={styles.modalCard} onPress={() => undefined}>
             <Text style={styles.modalTitle}>Display name</Text>

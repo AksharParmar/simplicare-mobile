@@ -16,63 +16,6 @@ const EMPTY_STATE: AppState = {
   doseLogs: [],
 };
 
-function createId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function getDeviceTimezone(): string {
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return timezone || 'America/New_York';
-}
-
-function buildSeedState(): AppState {
-  const nowIso = new Date().toISOString();
-  const today = nowIso.slice(0, 10);
-  const timezone = getDeviceTimezone();
-
-  const medications: Medication[] = [
-    {
-      id: createId('med'),
-      name: 'Lisinopril',
-      strength: '10 mg',
-      instructions: 'Take with water.',
-      createdAt: nowIso,
-    },
-    {
-      id: createId('med'),
-      name: 'Metformin',
-      strength: '500 mg',
-      instructions: 'Take with food.',
-      createdAt: nowIso,
-    },
-  ];
-
-  const schedules: Schedule[] = [
-    {
-      id: createId('sch'),
-      medicationId: medications[0].id,
-      times: ['08:00', '20:00'],
-      timezone,
-      startDate: today,
-      createdAt: nowIso,
-    },
-    {
-      id: createId('sch'),
-      medicationId: medications[1].id,
-      times: ['09:00', '21:00'],
-      timezone,
-      startDate: today,
-      createdAt: nowIso,
-    },
-  ];
-
-  return {
-    medications,
-    schedules,
-    doseLogs: [],
-  };
-}
-
 export async function loadState(): Promise<AppState> {
   const raw = await AsyncStorage.getItem(STORE_KEY);
   if (!raw) {
@@ -104,9 +47,8 @@ export async function seedIfEmpty(): Promise<AppState> {
     return state;
   }
 
-  const seeded = buildSeedState();
-  await saveState(seeded);
-  return seeded;
+  await saveState(EMPTY_STATE);
+  return EMPTY_STATE;
 }
 
 export async function addMedication(medication: Medication): Promise<AppState> {

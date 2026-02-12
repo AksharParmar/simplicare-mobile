@@ -1,8 +1,9 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RootStackParamList, RootTabParamList } from '../navigation/types';
@@ -36,8 +37,9 @@ function formatNextTime(times: string[]): string {
 export function MyMedicationsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const stackNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { state } = useAppState();
+  const { state, deleteMedication } = useAppState();
   const [banner, setBanner] = useState<string | null>(null);
+  const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
 
   const schedulesByMedication = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -78,36 +80,88 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
     return () => clearTimeout(timer);
   }, [route.params?.flashMessage, navigation]);
 
+  function confirmDelete(medicationId: string, medicationName: string) {
+    Alert.alert(`Delete ${medicationName}?`, 'This removes the medication, schedules, and related logs.', [
+      { text: 'Cancel', style: 'cancel', onPress: () => swipeableRefs.current[medicationId]?.close() },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteMedication(medicationId);
+          navigation.setParams({
+            flashMessage: `${medicationName} deleted`,
+            openedAt: Date.now(),
+          });
+        },
+      },
+    ]);
+  }
+
+  function renderDeleteAction(medicationId: string, medicationName: string) {
+    return (
+      <Pressable
+        style={styles.deleteSwipeAction}
+        onPress={() => confirmDelete(medicationId, medicationName)}
+      >
+        <Text style={styles.deleteSwipeText}>Delete</Text>
+      </Pressable>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Medications</Text>
-        <Text style={styles.editText}>Edit</Text>
+        <Pressable style={styles.addButton} onPress={() => stackNavigation.navigate('ManualAddMedication')}>
+          <Text style={styles.addButtonText}>Add medication</Text>
+        </Pressable>
       </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
 
       {state.medications.length === 0 ? (
-        <Text style={styles.empty}>No medications yet. Tap + to add one.</Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No medications yet</Text>
+          <Text style={styles.emptySubtitle}>Start by adding your first medication.</Text>
+          <Pressable style={styles.emptyButton} onPress={() => stackNavigation.navigate('ManualAddMedication')}>
+            <Text style={styles.emptyButtonText}>Add medication</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {state.medications.map((medication) => {
         const allTimes = schedulesByMedication.get(medication.id) ?? [];
         return (
-          <Pressable
+          <Swipeable
             key={medication.id}
-            style={styles.card}
-            onPress={() => stackNavigation.navigate('MedicationDetail', { medicationId: medication.id })}
+            ref={(ref: Swipeable | null) => {
+              swipeableRefs.current[medication.id] = ref;
+            }}
+            overshootRight={false}
+            renderRightActions={() => renderDeleteAction(medication.id, medication.name)}
           >
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardTextWrap}>
-                <Text style={styles.cardTitle}>{medication.name}</Text>
-                {medication.strength ? <Text style={styles.cardSubtitle}>{medication.strength}</Text> : null}
-                <Text style={styles.cardMeta}>{formatNextTime(allTimes)}</Text>
+            <Pressable
+              style={styles.card}
+              onPress={() => stackNavigation.navigate('MedicationDetail', { medicationId: medication.id })}
+            >
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardTextWrap}>
+                  <Text style={styles.cardTitle}>{medication.name}</Text>
+                  {medication.strength ? <Text style={styles.cardSubtitle}>{medication.strength}</Text> : null}
+                  <Text style={styles.cardMeta}>{formatNextTime(allTimes)}</Text>
+                </View>
+                <View style={styles.cardActions}>
+                  <Pressable
+                    style={styles.editPill}
+                    onPress={() => stackNavigation.navigate('EditMedication', { medicationId: medication.id })}
+                  >
+                    <Text style={styles.editPillText}>Edit</Text>
+                  </Pressable>
+                  <Text style={styles.chevron}>›</Text>
+                </View>
               </View>
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </Pressable>
+            </Pressable>
+          </Swipeable>
         );
       })}
 
@@ -149,10 +203,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
-  editText: {
-    fontSize: typography.body,
-    color: '#64748b',
-    fontWeight: '600',
+  addButton: {
+    minHeight: 40,
+    borderRadius: radius.md,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: typography.caption,
+    fontWeight: '700',
   },
   banner: {
     borderWidth: 1,
@@ -163,6 +225,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
+    fontSize: typography.body,
+    fontWeight: '600',
+  },
+  emptyCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: typography.subtitle,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: typography.body,
+    color: '#64748b',
+    marginBottom: spacing.sm,
+  },
+  emptyButton: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  emptyButtonText: {
+    color: '#ffffff',
     fontSize: typography.body,
     fontWeight: '600',
   },
@@ -203,10 +297,40 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: spacing.xs,
   },
+  cardActions: {
+    alignItems: 'flex-end',
+  },
+  editPill: {
+    minHeight: 32,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  editPillText: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '700',
+  },
   chevron: {
-    fontSize: 28,
+    fontSize: 24,
     color: '#94a3b8',
-    marginTop: -2,
+  },
+  deleteSwipeAction: {
+    width: 96,
+    marginBottom: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteSwipeText: {
+    color: '#ffffff',
+    fontSize: typography.body,
+    fontWeight: '700',
   },
   sectionWrap: {
     marginTop: spacing.sm,

@@ -8,10 +8,11 @@ import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AddHubActionSheet } from './src/components/AddHubActionSheet';
-import { WelcomeModal } from './src/components/WelcomeModal';
+import { TutorialModal } from './src/components/TutorialModal';
 import { RootStackParamList, RootTabParamList } from './src/navigation/types';
 import {
   DoseReminderPayload,
@@ -33,10 +34,7 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppStateProvider } from './src/state/AppStateContext';
 import { PreferencesProvider } from './src/state/PreferencesContext';
-import {
-  hasSeenWelcomeModal,
-  setHasSeenWelcomeModal,
-} from './src/storage/welcomeModalStorage';
+import { hasSeenTutorial, setHasSeenTutorial } from './src/storage/tutorialStore';
 import { spacing, typography } from './src/theme/tokens';
 
 Notifications.setNotificationHandler({
@@ -102,7 +100,7 @@ function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
 }
 
 function AppShell() {
-  const [isWelcomeVisible, setIsWelcomeVisible] = useState(false);
+  const [isTutorialVisible, setIsTutorialVisible] = useState(false);
   const [isAddHubVisible, setIsAddHubVisible] = useState(false);
   const [queuedReminder, setQueuedReminder] = useState<DoseReminderPayload | null>(null);
 
@@ -131,14 +129,14 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
-    async function checkWelcomeModal() {
-      const seen = await hasSeenWelcomeModal();
+    async function checkTutorialModal() {
+      const seen = await hasSeenTutorial();
       if (!seen) {
-        setIsWelcomeVisible(true);
+        setIsTutorialVisible(true);
       }
     }
 
-    void checkWelcomeModal();
+    void checkTutorialModal();
   }, []);
 
   useEffect(() => {
@@ -158,14 +156,14 @@ function AppShell() {
     };
   }, [openDoseReminder]);
 
-  async function handleGetStarted() {
-    await setHasSeenWelcomeModal(true);
-    setIsWelcomeVisible(false);
+  async function handleCloseTutorial() {
+    await setHasSeenTutorial(true);
+    setIsTutorialVisible(false);
   }
 
-  async function handleAddMedicationFromWelcome() {
-    await setHasSeenWelcomeModal(true);
-    setIsWelcomeVisible(false);
+  async function handleAddMedicationFromTutorial() {
+    await setHasSeenTutorial(true);
+    setIsTutorialVisible(false);
 
     if (navigationRef.isReady()) {
       navigationRef.navigate('ManualAddMedication');
@@ -239,10 +237,10 @@ function AppShell() {
         onAddManual={handleOpenManual}
       />
 
-      <WelcomeModal
-        visible={isWelcomeVisible}
-        onGetStarted={() => void handleGetStarted()}
-        onAddMedication={() => void handleAddMedicationFromWelcome()}
+      <TutorialModal
+        visible={isTutorialVisible}
+        onClose={() => void handleCloseTutorial()}
+        onAddMedication={() => void handleAddMedicationFromTutorial()}
       />
     </>
   );
@@ -250,17 +248,22 @@ function AppShell() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <PreferencesProvider>
-        <AppStateProvider>
-          <AppShell />
-        </AppStateProvider>
-      </PreferencesProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <PreferencesProvider>
+          <AppStateProvider>
+            <AppShell />
+          </AppStateProvider>
+        </PreferencesProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   placeholder: {
     flex: 1,
     backgroundColor: '#f8fafc',

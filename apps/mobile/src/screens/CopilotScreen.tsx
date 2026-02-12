@@ -142,7 +142,10 @@ export function CopilotScreen() {
             placeholder="Ask Copilot"
             placeholderTextColor="#94a3b8"
             style={styles.input}
-            multiline
+            multiline={false}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={() => sendMessage(input)}
           />
           <Pressable
             style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
