@@ -32,6 +32,7 @@ export type RootStackParamList = {
   ConfirmScannedMedication: {
     imageUri?: string;
     rawText: string;
+    ocrLines?: string[];
     ocrError?: string;
   };
   MedicationDetail: {

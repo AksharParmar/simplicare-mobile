@@ -6,12 +6,14 @@ export type Preferences = {
   displayName: string;
   remindersEnabled: boolean;
   defaultSnoozeMinutes: 5 | 10 | 15;
+  saveScanTextLocally: boolean;
 };
 
 export const DEFAULT_PREFS: Preferences = {
   displayName: '',
   remindersEnabled: true,
   defaultSnoozeMinutes: 10,
+  saveScanTextLocally: false,
 };
 
 export async function loadPreferences(): Promise<Preferences> {
@@ -29,6 +31,7 @@ export async function loadPreferences(): Promise<Preferences> {
       displayName: parsed.displayName ?? '',
       remindersEnabled: parsed.remindersEnabled ?? true,
       defaultSnoozeMinutes: safeSnooze,
+      saveScanTextLocally: parsed.saveScanTextLocally ?? false,
     };
   } catch {
     return DEFAULT_PREFS;

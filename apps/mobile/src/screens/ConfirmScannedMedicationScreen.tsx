@@ -1,11 +1,23 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import {
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { RootStackParamList } from '../navigation/types';
-import { parseLabelText } from '../scan/parseLabel';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { ConfidenceLevel, extractLabelFields } from '../utils/labelExtract';
 import { formatHHMMTo12Hour } from '../utils/timeFormat';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ConfirmScannedMedication'>;
@@ -30,10 +42,16 @@ function sortTimes(times: string[]): string[] {
 }
 
 const SAMPLE_LABEL_TEXT = `Metformin 500 mg\nTake one tablet twice daily with food\nRx use only`;
+const DEV_BUILD_COMMANDS = `npm i -g eas-cli
+eas login
+cd apps/mobile
+eas build:configure
+eas build --profile development --platform ios
+npx expo start --dev-client`;
 
 export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
   const { addMedication, addSchedule } = useAppState();
-  const { imageUri, rawText: initialRawText, ocrError } = route.params;
+  const { imageUri, rawText: initialRawText, ocrError, ocrLines } = route.params;
 
   const [rawText, setRawText] = useState(initialRawText);
   const [name, setName] = useState('');
@@ -44,17 +62,28 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDetectedText, setShowDetectedText] = useState(false);
+  const [showDevBuildModal, setShowDevBuildModal] = useState(false);
+  const [confidence, setConfidence] = useState<{
+    name: ConfidenceLevel;
+    strength: ConfidenceLevel;
+    instructions: ConfidenceLevel;
+  }>({
+    name: 'low',
+    strength: 'low',
+    instructions: 'low',
+  });
 
   const canSave = useMemo(() => name.trim().length > 0 && times.length > 0 && !saving, [name, times, saving]);
 
   useEffect(() => {
-    const parsed = parseLabelText(rawText);
+    const parsed = extractLabelFields(rawText);
+    setConfidence(parsed.confidence);
 
-    setName((prev) => prev || parsed.nameCandidate);
+    setName((prev) => prev || parsed.nameCandidate || '');
     setStrength((prev) => prev || parsed.strengthCandidate || '');
     setInstructions((prev) => prev || parsed.instructionsCandidate || '');
     setTimes((prev) => (prev.length > 0 ? prev : parsed.timesSuggested));
-    setTimeInput(parsed.timesSuggested[0] ?? '09:00');
+    setTimeInput((prev) => (prev ? prev : parsed.timesSuggested[0] ?? '09:00'));
   }, [rawText]);
 
   function handleAddTime() {
@@ -115,11 +144,9 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
     }
   }
 
-  function showOCRInfo() {
-    Alert.alert(
-      'Enable scanning OCR',
-      'OCR requires the SimpliCare development build (custom dev client). Expo Go cannot run the native OCR module.',
-    );
+  async function copyDevCommands() {
+    await Clipboard.setStringAsync(DEV_BUILD_COMMANDS);
+    Alert.alert('Copied', 'Development build commands copied to clipboard.');
   }
 
   return (
@@ -137,7 +164,7 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
             <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('ManualAddMedication')}>
               <Text style={styles.secondaryButtonText}>Continue with manual add</Text>
             </Pressable>
-            <Pressable style={styles.ghostButton} onPress={showOCRInfo}>
+            <Pressable style={styles.ghostButton} onPress={() => setShowDevBuildModal(true)}>
               <Text style={styles.ghostButtonText}>Learn how to enable scanning</Text>
             </Pressable>
           </View>
@@ -147,6 +174,9 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
       <View style={styles.fieldWrap}>
         <Text style={styles.label}>Medication name</Text>
         <TextInput value={name} onChangeText={setName} placeholder="Required" style={styles.input} />
+        {confidence.name === 'low' ? (
+          <Text style={styles.lowConfidenceText}>From label (low confidence). Please verify.</Text>
+        ) : null}
       </View>
 
       <View style={styles.fieldWrap}>
@@ -158,6 +188,9 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
           style={styles.input}
         />
         <Text style={styles.helperText}>What&apos;s printed on the label (dose strength).</Text>
+        {confidence.strength === 'low' ? (
+          <Text style={styles.lowConfidenceText}>Strength uncertainty detected. Please verify.</Text>
+        ) : null}
       </View>
 
       <View style={styles.fieldWrap}>
@@ -170,6 +203,9 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
           multiline
         />
         <Text style={styles.helperText}>Optional notes you want to remember.</Text>
+        {confidence.instructions === 'low' ? (
+          <Text style={styles.lowConfidenceText}>Instructions are uncertain. Edit as needed.</Text>
+        ) : null}
       </View>
 
       <View style={styles.fieldWrap}>
@@ -204,7 +240,9 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
 
       {showDetectedText ? (
         <View style={styles.detectedTextCard}>
-          <Text style={styles.detectedTextContent}>{rawText || 'No text detected.'}</Text>
+          <Text style={styles.detectedTextContent}>
+            {rawText || (ocrLines && ocrLines.length > 0 ? ocrLines.join('\n') : 'No text detected.')}
+          </Text>
         </View>
       ) : null}
 
@@ -223,6 +261,24 @@ export function ConfirmScannedMedicationScreen({ navigation, route }: Props) {
       <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('ManualAddMedication')}>
         <Text style={styles.secondaryButtonText}>Edit manually</Text>
       </Pressable>
+
+      <Modal visible={showDevBuildModal} transparent animationType="fade" onRequestClose={() => setShowDevBuildModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowDevBuildModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => undefined}>
+            <Text style={styles.modalTitle}>Enable scanning (dev build)</Text>
+            <Text style={styles.modalBody}>Run these commands to build and run the dev client:</Text>
+            <View style={styles.commandBox}>
+              <Text style={styles.commandText}>{DEV_BUILD_COMMANDS}</Text>
+            </View>
+            <Pressable style={styles.primaryButton} onPress={() => void copyDevCommands()}>
+              <Text style={styles.primaryButtonText}>Copy commands</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => setShowDevBuildModal(false)}>
+              <Text style={styles.secondaryButtonText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -294,6 +350,11 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: typography.caption,
     color: '#64748b',
+    marginTop: spacing.xs,
+  },
+  lowConfidenceText: {
+    fontSize: typography.caption,
+    color: '#9a3412',
     marginTop: spacing.xs,
   },
   multiline: {
@@ -421,5 +482,43 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#b91c1c',
     marginBottom: spacing.md,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.24)',
+    justifyContent: 'flex-end',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
+    padding: spacing.md,
+  },
+  modalTitle: {
+    fontSize: typography.subtitle,
+    color: '#0f172a',
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  modalBody: {
+    fontSize: typography.caption,
+    color: '#475569',
+    marginBottom: spacing.sm,
+  },
+  commandBox: {
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    borderRadius: radius.md,
+    backgroundColor: '#f8fafc',
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  commandText: {
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    color: '#1f2937',
+    lineHeight: 18,
   },
 });

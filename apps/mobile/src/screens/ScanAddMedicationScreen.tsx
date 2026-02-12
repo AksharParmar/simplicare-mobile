@@ -5,6 +5,8 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 
 import { RootStackParamList } from '../navigation/types';
 import { recognizeTextFromImage } from '../scan/ocr';
+import { usePreferences } from '../state/PreferencesContext';
+import { clearLastScanText, saveLastScanText } from '../storage/scanStore';
 import { radius, spacing, typography } from '../theme/tokens';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ScanAddMedication'>;
@@ -12,6 +14,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ScanAddMedication'>;
 export function ScanAddMedicationScreen({ navigation }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
+  const { prefs } = usePreferences();
 
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -37,9 +40,16 @@ export function ScanAddMedicationScreen({ navigation }: Props) {
       const ocrResult = await recognizeTextFromImage(capturedUri);
 
       if ('text' in ocrResult) {
+        if (prefs.saveScanTextLocally) {
+          await saveLastScanText(ocrResult.text);
+        } else {
+          await clearLastScanText();
+        }
+
         navigation.navigate('ConfirmScannedMedication', {
           imageUri: capturedUri,
           rawText: ocrResult.text,
+          ocrLines: ocrResult.lines,
         });
       } else {
         navigation.navigate('ConfirmScannedMedication', {

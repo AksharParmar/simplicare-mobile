@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 
-type OCRSuccess = { text: string };
+type OCRSuccess = { text: string; lines: string[] };
 type OCRError = { error: string };
 
 export async function recognizeTextFromImage(uri: string): Promise<OCRSuccess | OCRError> {
@@ -22,12 +22,22 @@ export async function recognizeTextFromImage(uri: string): Promise<OCRSuccess | 
 
     const result = await textRecognition.recognize(uri);
     const text = typeof result?.text === 'string' ? result.text : '';
+    const lines =
+      Array.isArray(result?.blocks) && result.blocks.length > 0
+        ? result.blocks
+            .flatMap((block: { lines?: Array<{ text?: string }> }) => block.lines ?? [])
+            .map((line: { text?: string }) => line.text ?? '')
+            .filter((line: string) => line.trim().length > 0)
+        : text
+            .split(/\r?\n/)
+            .map((line: string) => line.trim())
+            .filter((line: string) => line.length > 0);
 
     if (!text.trim()) {
       return { error: 'No readable text found in this photo.' };
     }
 
-    return { text };
+    return { text, lines };
   } catch {
     return { error: 'OCR not available in Expo Go. Build a dev client.' };
   }

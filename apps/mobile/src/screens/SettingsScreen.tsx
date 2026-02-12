@@ -108,6 +108,7 @@ export function SettingsScreen() {
                 displayName: '',
                 remindersEnabled: true,
                 defaultSnoozeMinutes: 10,
+                saveScanTextLocally: false,
               });
 
               Alert.alert('Data cleared', 'Your app is reset to a clean local state.');
@@ -188,6 +189,17 @@ export function SettingsScreen() {
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Privacy & Data</Text>
+        <View style={styles.rowStatic}>
+          <Text style={styles.rowLabel}>Save scan text locally</Text>
+          <Switch
+            value={prefs.saveScanTextLocally}
+            onValueChange={(next) => {
+              void updatePrefs({ saveScanTextLocally: next });
+            }}
+            trackColor={{ false: '#cbd5e1', true: '#bfdbfe' }}
+            thumbColor={prefs.saveScanTextLocally ? '#2563eb' : '#ffffff'}
+          />
+        </View>
         <Pressable style={styles.row} onPress={() => void handleExportData()}>
           <Text style={styles.rowLabel}>Export my data</Text>
           <Text style={styles.chevron}>›</Text>
