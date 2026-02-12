@@ -14,14 +14,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AdherenceRing } from '../components/AdherenceRing';
 import { DoseActionSheet } from '../components/DoseActionSheet';
 import { RootTabParamList } from '../navigation/types';
 import { scheduleSnoozeNotification } from '../notifications/notificationScheduler';
 import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
+import { get7DayStats, getDayStats, getStreakDays } from '../utils/adherence';
 import { formatHHMMTo12Hour } from '../utils/timeFormat';
-import { getAdherenceStreak, getLastNDaysAdherence } from '../utils/adherence';
 import {
   getCompletedDoseKeySetForToday,
   getDoseKeyFromInstance,
@@ -36,43 +37,33 @@ type ActiveDose = TodayDoseInstance & {
   strength?: string;
 };
 
-function formatRelativeTime(scheduledAt: string, now: Date): string {
-  const target = new Date(scheduledAt);
+function formatRelativeTime(scheduledAtISO: string, now: Date): string {
+  const target = new Date(scheduledAtISO);
   const diffMinutes = Math.round((target.getTime() - now.getTime()) / 60000);
-
   if (Math.abs(diffMinutes) <= 5) {
     return 'Now';
   }
-
   if (diffMinutes < 60) {
-    return `In ${diffMinutes} min`;
+    return `In ${Math.max(1, diffMinutes)} min`;
   }
 
   const hours = Math.floor(diffMinutes / 60);
   const minutes = diffMinutes % 60;
-  if (minutes === 0) {
-    return `In ${hours} hr`;
-  }
-
-  return `In ${hours} hr ${minutes} min`;
+  return minutes === 0 ? `In ${hours} hr` : `In ${hours} hr ${minutes} min`;
 }
 
 export function TodayScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh } = useAppState();
-  const [submitting, setSubmitting] = useState(false);
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
 
+  const now = new Date();
   const greeting = prefs.displayName.trim() ? `Hi, ${prefs.displayName.trim()}` : 'Hi there';
-
-  const medicationById = useMemo(
-    () => new Map(state.medications.map((medication) => [medication.id, medication])),
-    [state.medications],
-  );
-
   const hasAnyMedication = state.medications.length > 0;
+  const hasAnySchedule = state.schedules.length > 0;
 
   useEffect(() => {
     if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -80,50 +71,48 @@ export function TodayScreen({ route, navigation }: Props) {
     }
   }, []);
 
-  const now = new Date();
-  const allDosesForToday = useMemo(() => getTodayDoseInstances(state, now), [state, now]);
-
-  const completedDoseKeys = useMemo(
-    () => getCompletedDoseKeySetForToday(state, now),
-    [state, now],
+  const medicationById = useMemo(
+    () => new Map(state.medications.map((medication) => [medication.id, medication])),
+    [state.medications],
   );
 
-  const remainingDoses = useMemo(
+  const allTodayDoses = useMemo(() => getTodayDoseInstances(state, now), [state, now]);
+  const completedKeys = useMemo(() => getCompletedDoseKeySetForToday(state, now), [state, now]);
+
+  const remainingTodayDoses = useMemo(
     () =>
-      allDosesForToday
-        .filter((dose) => !completedDoseKeys.has(getDoseKeyFromInstance(dose)))
+      allTodayDoses
+        .filter((dose) => !completedKeys.has(getDoseKeyFromInstance(dose)))
         .map((dose) => ({
           ...dose,
-          instructions: medicationById.get(dose.medicationId)?.instructions,
           strength: medicationById.get(dose.medicationId)?.strength,
+          instructions: medicationById.get(dose.medicationId)?.instructions,
         })),
-    [allDosesForToday, completedDoseKeys, medicationById],
+    [allTodayDoses, completedKeys, medicationById],
   );
 
   const upcomingDoses = useMemo(
-    () => remainingDoses.filter((dose) => new Date(dose.scheduledAt).getTime() >= now.getTime()),
-    [remainingDoses, now],
+    () =>
+      remainingTodayDoses.filter(
+        (dose) => new Date(dose.scheduledAt).getTime() >= now.getTime(),
+      ),
+    [remainingTodayDoses, now],
   );
 
   const nextDose = upcomingDoses[0] ?? null;
   const laterDoses = nextDose
-    ? upcomingDoses.filter((dose) => dose.id !== nextDose.id).slice(0, 5)
+    ? upcomingDoses.filter((dose) => dose.id !== nextDose.id).slice(0, 6)
     : [];
-  const hiddenLaterCount = nextDose ? Math.max(0, upcomingDoses.length - 1 - laterDoses.length) : 0;
+  const hiddenLaterCount = nextDose
+    ? Math.max(0, upcomingDoses.length - 1 - laterDoses.length)
+    : 0;
 
-  const last7Days = useMemo(() => getLastNDaysAdherence(state, 7, now), [state, now]);
-  const streak = useMemo(() => getAdherenceStreak(state, now), [state, now]);
-  const sevenDayPercent = Math.round(last7Days.overallRate * 100);
-  const sevenDayTaken = useMemo(
-    () => last7Days.days.reduce((sum, day) => sum + day.taken, 0),
-    [last7Days.days],
-  );
-  const sevenDaySkipped = useMemo(
-    () => last7Days.days.reduce((sum, day) => sum + day.skipped, 0),
-    [last7Days.days],
-  );
-  const hasSevenDayData = sevenDayTaken + sevenDaySkipped > 0;
-  const sevenDayDenominator = Math.max(1, sevenDayTaken + sevenDaySkipped);
+  const todayStats = useMemo(() => getDayStats(state, now), [state, now]);
+  const sevenDayStats = useMemo(() => get7DayStats(state, now), [state, now]);
+  const streakDays = useMemo(() => getStreakDays(state, now), [state, now]);
+
+  const dayTotalForBar = Math.max(1, todayStats.total);
+  const sevenDayPercent = Math.round(sevenDayStats.overallRate * 100);
 
   useEffect(() => {
     const reminder = route.params?.reminder;
@@ -131,17 +120,16 @@ export function TodayScreen({ route, navigation }: Props) {
       return;
     }
 
-    const matchingDose = remainingDoses.find(
+    const matched = remainingTodayDoses.find(
       (dose) =>
         dose.medicationId === reminder.medicationId &&
         dose.scheduleId === reminder.scheduleId &&
         dose.timeLabel === reminder.timeHHMM,
     );
-
-    if (matchingDose) {
-      setSelectedDose(matchingDose);
+    if (matched) {
+      setSelectedDose(matched);
     }
-  }, [route.params?.openedAt, route.params?.reminder, remainingDoses]);
+  }, [route.params?.openedAt, route.params?.reminder, remainingTodayDoses]);
 
   useEffect(() => {
     const flashMessage = route.params?.flashMessage;
@@ -154,11 +142,10 @@ export function TodayScreen({ route, navigation }: Props) {
       setBanner(null);
       navigation.setParams({ flashMessage: undefined });
     }, 1600);
-
     return () => clearTimeout(timer);
   }, [route.params?.flashMessage, navigation]);
 
-  async function handleLogForDose(dose: ActiveDose, status: 'taken' | 'skipped') {
+  async function logDose(dose: ActiveDose, status: 'taken' | 'skipped') {
     setSubmitting(true);
     try {
       await addDoseLog({
@@ -175,12 +162,12 @@ export function TodayScreen({ route, navigation }: Props) {
     }
   }
 
-  async function handleLog(status: 'taken' | 'skipped') {
+  async function handleSheetLog(status: 'taken' | 'skipped') {
     if (!selectedDose) {
       return;
     }
 
-    await handleLogForDose(selectedDose, status);
+    await logDose(selectedDose, status);
   }
 
   async function handleSnooze() {
@@ -205,41 +192,63 @@ export function TodayScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
+    >
       <Text style={styles.greeting}>{greeting}</Text>
       <Text style={styles.title}>Today</Text>
-      <View style={styles.headerMetaRow}>
-        {streak > 0 ? (
-          <View style={styles.metaPill}>
-            <Text style={styles.metaPillText}>🔥 {streak}-day streak</Text>
-          </View>
-        ) : null}
-        <View style={styles.metaPill}>
-          <Text style={styles.metaPillText}>7-day: {sevenDayPercent}%</Text>
-        </View>
-      </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
 
-      <View style={styles.adherenceCard}>
-        <View style={styles.adherenceHeaderRow}>
-          <Text style={styles.adherenceTitle}>7-day adherence</Text>
-          <Text style={styles.adherencePercent}>{hasSevenDayData ? `${sevenDayPercent}%` : 'No data yet'}</Text>
-        </View>
-        <View style={styles.barTrack}>
-          <View style={[styles.barTaken, { flex: hasSevenDayData ? sevenDayTaken / sevenDayDenominator : 1 }]} />
-          <View style={[styles.barSkipped, { flex: hasSevenDayData ? sevenDaySkipped / sevenDayDenominator : 0 }]} />
-        </View>
-        {hasSevenDayData ? (
-          <Text style={styles.adherenceMeta}>
-            Taken {sevenDayTaken} · Skipped {sevenDaySkipped}
+      <View style={styles.insightsCard}>
+        <View style={styles.insightsLeft}>
+          <Text style={styles.cardTitle}>7-day adherence</Text>
+          <Text style={styles.cardSubtitle}>
+            {sevenDayStats.totalLogged > 0 ? `${sevenDayPercent}% overall` : 'No data yet'}
           </Text>
-        ) : null}
+          <View style={styles.streakBadge}>
+            <Text style={styles.streakText}>
+              {streakDays > 0 ? `🔥 ${streakDays}-day streak` : 'No streak yet'}
+            </Text>
+          </View>
+        </View>
+        <AdherenceRing
+          progress={sevenDayStats.overallRate}
+          noData={sevenDayStats.totalLogged === 0}
+        />
+      </View>
+
+      <View style={styles.progressCard}>
+        <Text style={styles.cardTitle}>Day progress</Text>
+        {todayStats.total > 0 ? (
+          <>
+            <View style={styles.progressStatsRow}>
+              <Text style={styles.progressStat}>Taken {todayStats.taken}</Text>
+              <Text style={styles.progressStat}>Skipped {todayStats.skipped}</Text>
+              <Text style={styles.progressStat}>Remaining {todayStats.remaining}</Text>
+            </View>
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.barTaken, { flex: todayStats.taken / dayTotalForBar }]} />
+              <View style={[styles.barSkipped, { flex: todayStats.skipped / dayTotalForBar }]} />
+              <View style={[styles.barRemaining, { flex: todayStats.remaining / dayTotalForBar }]} />
+            </View>
+          </>
+        ) : (
+          <View>
+            <Text style={styles.cardSubtitle}>No doses scheduled today</Text>
+            <Pressable
+              style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}
+              onPress={() => navigation.getParent()?.navigate('ManualAddMedication')}
+            >
+              <Text style={styles.addButtonText}>Add medication</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {isLoading ? <ActivityIndicator style={styles.loader} /> : null}
 
-      {!isLoading && !hasAnyMedication ? (
+      {!isLoading && !hasAnyMedication && !hasAnySchedule ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No medications yet</Text>
           <Text style={styles.emptySubtitle}>Add your first medication to start reminders.</Text>
@@ -261,19 +270,20 @@ export function TodayScreen({ route, navigation }: Props) {
               {nextDose.strength ? ` · ${nextDose.strength}` : ''}
             </Text>
             <Text style={styles.nextTime}>
-              {formatHHMMTo12Hour(nextDose.timeLabel)} · {formatRelativeTime(nextDose.scheduledAt, now)}
+              {formatHHMMTo12Hour(nextDose.timeLabel)} ·{' '}
+              {formatRelativeTime(nextDose.scheduledAt, now)}
             </Text>
             <View style={styles.nextActions}>
               <Pressable
                 style={({ pressed }) => [styles.primaryAction, pressed && styles.buttonPressed]}
-                onPress={() => void handleLogForDose(nextDose, 'taken')}
+                onPress={() => void logDose(nextDose, 'taken')}
                 disabled={submitting}
               >
-                <Text style={styles.primaryActionText}>Mark Taken</Text>
+                <Text style={styles.primaryActionText}>Mark taken</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.secondaryAction, pressed && styles.buttonPressed]}
-                onPress={() => void handleLogForDose(nextDose, 'skipped')}
+                onPress={() => void logDose(nextDose, 'skipped')}
                 disabled={submitting}
               >
                 <Text style={styles.secondaryActionText}>Skip</Text>
@@ -291,14 +301,13 @@ export function TodayScreen({ route, navigation }: Props) {
       {!isLoading && hasAnyMedication && laterDoses.length > 0 ? (
         <View style={styles.laterSection}>
           <View style={styles.laterHeader}>
-            <Text style={styles.laterTitle}>Later today</Text>
+            <Text style={styles.cardTitle}>Later today</Text>
             {hiddenLaterCount > 0 ? (
               <Pressable onPress={() => navigation.navigate('Medications')}>
                 <Text style={styles.seeAllText}>See all</Text>
               </Pressable>
             ) : null}
           </View>
-
           {laterDoses.map((dose) => (
             <Pressable
               key={dose.id}
@@ -320,8 +329,8 @@ export function TodayScreen({ route, navigation }: Props) {
         loading={submitting}
         snoozeMinutes={prefs.defaultSnoozeMinutes}
         onClose={() => setSelectedDose(null)}
-        onMarkTaken={() => void handleLog('taken')}
-        onSkip={() => void handleLog('skipped')}
+        onMarkTaken={() => void handleSheetLog('taken')}
+        onSkip={() => void handleSheetLog('skipped')}
         onSnooze={() => void handleSnooze()}
       />
     </ScrollView>
@@ -345,25 +354,6 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginBottom: spacing.md,
   },
-  headerMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  metaPill: {
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    borderRadius: radius.md,
-    backgroundColor: '#ffffff',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  metaPillText: {
-    fontSize: typography.caption,
-    color: '#334155',
-    fontWeight: '700',
-  },
   banner: {
     borderWidth: 1,
     borderColor: '#d1fae5',
@@ -376,36 +366,66 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: '600',
   },
-  adherenceCard: {
+  insightsCard: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
     borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
     padding: spacing.md,
     marginBottom: spacing.md,
-  },
-  adherenceHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
-  adherenceTitle: {
-    fontSize: typography.body,
-    fontWeight: '700',
+  insightsLeft: {
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: typography.subtitle,
     color: '#0f172a',
-  },
-  adherencePercent: {
-    fontSize: typography.body,
-    color: '#0f172a',
     fontWeight: '700',
   },
-  adherenceMeta: {
-    fontSize: typography.caption,
+  cardSubtitle: {
+    fontSize: typography.body,
     color: '#64748b',
     marginTop: spacing.xs,
   },
-  barTrack: {
+  streakBadge: {
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: radius.md,
+    backgroundColor: '#fff7ed',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  streakText: {
+    fontSize: typography.caption,
+    color: '#9a3412',
+    fontWeight: '700',
+  },
+  progressCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  progressStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  progressStat: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  progressBarTrack: {
     height: 12,
     borderRadius: 8,
     overflow: 'hidden',
@@ -418,14 +438,17 @@ const styles = StyleSheet.create({
   barSkipped: {
     backgroundColor: '#f59e0b',
   },
+  barRemaining: {
+    backgroundColor: '#94a3b8',
+  },
   loader: {
     marginBottom: spacing.md,
   },
   emptyCard: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
     borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
     padding: spacing.md,
     marginBottom: spacing.md,
   },
@@ -447,39 +470,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
-  },
-  buttonPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
+    marginTop: spacing.sm,
   },
   addButtonText: {
     color: '#ffffff',
     fontSize: typography.body,
     fontWeight: '600',
   },
-  doneCard: {
-    borderWidth: 1,
-    borderColor: '#d1fae5',
-    backgroundColor: '#ecfdf5',
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  doneTitle: {
-    fontSize: typography.subtitle,
-    color: '#065f46',
-    fontWeight: '700',
-    marginBottom: spacing.xs,
-  },
-  doneSubtitle: {
-    fontSize: typography.body,
-    color: '#065f46',
-  },
   nextCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    borderRadius: radius.lg,
+    backgroundColor: '#ffffff',
     padding: spacing.md,
     marginBottom: spacing.md,
   },
@@ -491,8 +493,8 @@ const styles = StyleSheet.create({
   },
   nextMedication: {
     fontSize: typography.title,
-    fontWeight: '600',
     color: '#0f172a',
+    fontWeight: '700',
     marginBottom: spacing.xs,
   },
   nextTime: {
@@ -532,6 +534,24 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: '700',
   },
+  doneCard: {
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    borderRadius: radius.lg,
+    backgroundColor: '#ecfdf5',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  doneTitle: {
+    fontSize: typography.subtitle,
+    color: '#065f46',
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  doneSubtitle: {
+    fontSize: typography.body,
+    color: '#065f46',
+  },
   laterSection: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -544,11 +564,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
-  },
-  laterTitle: {
-    fontSize: typography.subtitle,
-    color: '#0f172a',
-    fontWeight: '700',
   },
   seeAllText: {
     fontSize: typography.caption,
@@ -575,5 +590,9 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#334155',
     fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
   },
 });

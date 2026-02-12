@@ -1,23 +1,12 @@
 import { AppState } from '../storage/localStore';
 
-type DailyAdherence = {
+export type DayStats = {
   taken: number;
   skipped: number;
   total: number;
+  remaining: number;
   rate: number;
 };
-
-type DailyAdherenceRow = DailyAdherence & {
-  dateISO: string;
-};
-
-function toLocalDateParts(date: Date): { year: number; month: number; day: number } {
-  return {
-    year: date.getFullYear(),
-    month: date.getMonth(),
-    day: date.getDate(),
-  };
-}
 
 function toDateISO(date: Date): string {
   const year = date.getFullYear();
@@ -47,13 +36,22 @@ function parseHHMM(time: string): { hour: number; minute: number } | null {
   return { hour, minute };
 }
 
-function getScheduledDoseKeysForDate(state: AppState, date: Date): Set<string> {
+function isScheduledForDate(daysOfWeek: number[] | undefined, date: Date): boolean {
+  if (!daysOfWeek || daysOfWeek.length === 0) {
+    return true;
+  }
+
+  return daysOfWeek.includes(date.getDay());
+}
+
+function getScheduledDoseKeys(state: AppState, date: Date): Set<string> {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
   const keys = new Set<string>();
-  const dayOfWeek = date.getDay();
-  const { year, month, day } = toLocalDateParts(date);
 
   for (const schedule of state.schedules) {
-    if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0 && !schedule.daysOfWeek.includes(dayOfWeek)) {
+    if (!isScheduledForDate(schedule.daysOfWeek, date)) {
       continue;
     }
 
@@ -71,89 +69,94 @@ function getScheduledDoseKeysForDate(state: AppState, date: Date): Set<string> {
   return keys;
 }
 
-export function getDoseKey(medicationId: string, scheduledAtISO: string): string {
-  const date = new Date(scheduledAtISO);
-  return `${medicationId}:${toDateISO(date)}:${toTimeHHMM(date)}`;
-}
-
-export function getDailyAdherence(state: AppState, date: Date): DailyAdherence {
-  const scheduledKeys = getScheduledDoseKeysForDate(state, date);
-  const dateISO = toDateISO(date);
-
+function getLoggedCountsForDate(state: AppState, date: Date, scheduledKeys: Set<string>): { taken: number; skipped: number } {
   let taken = 0;
   let skipped = 0;
-  const counted = new Set<string>();
+  const dateISO = toDateISO(date);
+  const seen = new Set<string>();
 
   for (const log of state.doseLogs) {
     const key = getDoseKey(log.medicationId, log.scheduledAt);
-    if (counted.has(key) || !scheduledKeys.has(key) || !key.includes(`:${dateISO}:`)) {
+    if (seen.has(key) || !scheduledKeys.has(key) || !key.includes(`:${dateISO}:`)) {
       continue;
     }
 
     if (log.status === 'taken') {
       taken += 1;
-      counted.add(key);
+      seen.add(key);
       continue;
     }
 
     if (log.status === 'skipped') {
       skipped += 1;
-      counted.add(key);
+      seen.add(key);
     }
   }
 
+  return { taken, skipped };
+}
+
+function startOfDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+export function getDoseKey(medicationId: string, scheduledAtISO: string): string {
+  const date = new Date(scheduledAtISO);
+  return `${medicationId}:${toDateISO(date)}:${toTimeHHMM(date)}`;
+}
+
+export function getDayStats(state: AppState, date: Date): DayStats {
+  const target = startOfDay(date);
+  const scheduledKeys = getScheduledDoseKeys(state, target);
   const total = scheduledKeys.size;
-  const denominator = taken + skipped;
+  const { taken, skipped } = getLoggedCountsForDate(state, target, scheduledKeys);
+  const remaining = Math.max(0, total - taken - skipped);
 
   return {
     taken,
     skipped,
     total,
-    rate: denominator > 0 ? taken / denominator : 0,
+    remaining,
+    rate: total > 0 ? taken / total : 0,
   };
 }
 
-export function getLastNDaysAdherence(
+export function get7DayStats(
   state: AppState,
-  n: number,
   now: Date,
 ): {
-  days: DailyAdherenceRow[];
   overallRate: number;
+  taken: number;
+  skipped: number;
+  totalLogged: number;
 } {
-  const days: DailyAdherenceRow[] = [];
+  let taken = 0;
+  let skipped = 0;
+  const end = startOfDay(now);
 
-  for (let offset = n - 1; offset >= 0; offset -= 1) {
-    const date = new Date(now);
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - offset);
-    const daily = getDailyAdherence(state, date);
-
-    days.push({
-      dateISO: toDateISO(date),
-      ...daily,
-    });
+  for (let offset = 0; offset < 7; offset += 1) {
+    const date = new Date(end);
+    date.setDate(end.getDate() - offset);
+    const dayStats = getDayStats(state, date);
+    taken += dayStats.taken;
+    skipped += dayStats.skipped;
   }
 
-  const taken = days.reduce((sum, day) => sum + day.taken, 0);
-  const skipped = days.reduce((sum, day) => sum + day.skipped, 0);
-  const denominator = taken + skipped;
-
+  const totalLogged = taken + skipped;
   return {
-    days,
-    overallRate: denominator > 0 ? taken / denominator : 0,
+    overallRate: totalLogged > 0 ? taken / totalLogged : 0,
+    taken,
+    skipped,
+    totalLogged,
   };
 }
 
-function isPerfectDay(day: DailyAdherence): boolean {
-  return day.total > 0 && day.taken === day.total && day.skipped === 0;
-}
-
-export function getAdherenceStreak(state: AppState, now: Date): number {
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const todayStats = getDailyAdherence(state, today);
-  const includeToday = isPerfectDay(todayStats);
+export function getStreakDays(state: AppState, now: Date): number {
+  const today = startOfDay(now);
+  const todayStats = getDayStats(state, today);
+  const includeToday = todayStats.total > 0 && todayStats.remaining === 0 && todayStats.taken === todayStats.total && todayStats.skipped === 0;
 
   let cursor = new Date(today);
   if (!includeToday) {
@@ -162,8 +165,9 @@ export function getAdherenceStreak(state: AppState, now: Date): number {
 
   let streak = 0;
   while (true) {
-    const stats = getDailyAdherence(state, cursor);
-    if (!isPerfectDay(stats)) {
+    const dayStats = getDayStats(state, cursor);
+    const isPerfect = dayStats.total > 0 && dayStats.taken === dayStats.total && dayStats.skipped === 0;
+    if (!isPerfect) {
       break;
     }
 
