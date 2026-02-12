@@ -1,5 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { rescheduleAllMedicationNotifications } from '../notifications/notificationScheduler';
 import { DoseLog, DoseLogStatus, Medication, Schedule } from '../models';
 import {
   addDoseLog as addDoseLogToStore,
@@ -53,6 +54,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     async function bootstrap() {
       const seeded = await seedIfEmpty();
       setState(seeded);
+      await rescheduleAllMedicationNotifications(seeded);
       setIsLoading(false);
     }
 
@@ -70,6 +72,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       };
       const next = await addMedicationToStore(medication);
       setState(next);
+      await rescheduleAllMedicationNotifications(next);
     },
     [],
   );
@@ -87,6 +90,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       };
       const next = await addScheduleToStore(schedule);
       setState(next);
+      await rescheduleAllMedicationNotifications(next);
     },
     [],
   );

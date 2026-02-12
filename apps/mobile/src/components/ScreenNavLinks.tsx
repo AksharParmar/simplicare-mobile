@@ -9,14 +9,7 @@ type Props = {
   navigation: NavigationProp<RootStackParamList>;
 };
 
-const screenOrder: ScreenName[] = [
-  'Onboarding',
-  'AddMedication',
-  'Today',
-  'Copilot',
-  'History',
-  'Settings',
-];
+const screenOrder: ScreenName[] = ['Today', 'AddMedication', 'Copilot', 'History', 'Settings'];
 
 export function ScreenNavLinks({ current, navigation }: Props) {
   return (
