@@ -104,7 +104,7 @@ function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
       <Tab.Screen
         name="Medications"
         component={MyMedicationsScreen}
-        options={{ tabBarLabel: 'Medications' }}
+        options={{ tabBarLabel: 'My Meds' }}
       />
       <Tab.Screen
         name="AddHub"

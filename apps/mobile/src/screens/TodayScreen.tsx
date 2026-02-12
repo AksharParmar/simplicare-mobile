@@ -22,7 +22,7 @@ import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
 import { get7DayStats, getDayStats, getStreakDays } from '../utils/adherence';
-import { formatHHMMTo12Hour } from '../utils/timeFormat';
+import { formatHHMMTo12Hour, formatISOTo12Hour } from '../utils/timeFormat';
 import {
   getCompletedDoseKeySetForToday,
   getDoseKeyFromInstance,
@@ -74,6 +74,13 @@ export function TodayScreen({ route, navigation }: Props) {
   const medicationById = useMemo(
     () => new Map(state.medications.map((medication) => [medication.id, medication])),
     [state.medications],
+  );
+  const recentLogs = useMemo(
+    () =>
+      [...state.doseLogs]
+        .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())
+        .slice(0, 5),
+    [state.doseLogs],
   );
 
   const allTodayDoses = useMemo(() => getTodayDoseInstances(state, now), [state, now]);
@@ -318,6 +325,31 @@ export function TodayScreen({ route, navigation }: Props) {
               <Text style={styles.laterTime}>{formatHHMMTo12Hour(dose.timeLabel)}</Text>
             </Pressable>
           ))}
+        </View>
+      ) : null}
+
+      {!isLoading ? (
+        <View style={styles.recentWrap}>
+          <Text style={styles.recentTitle}>Recent activity</Text>
+          {recentLogs.length === 0 ? (
+            <Text style={styles.recentEmpty}>No logs yet.</Text>
+          ) : (
+            <View style={styles.recentContainer}>
+              {recentLogs.map((log, index) => (
+                <View
+                  key={log.id}
+                  style={[styles.recentRow, index < recentLogs.length - 1 && styles.recentRowDivider]}
+                >
+                  <Text style={styles.recentName}>
+                    {medicationById.get(log.medicationId)?.name ?? 'Unknown medication'}
+                  </Text>
+                  <Text style={styles.recentMeta}>
+                    {log.status} · {formatISOTo12Hour(log.scheduledAt)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       ) : null}
 
@@ -590,6 +622,49 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#334155',
     fontWeight: '600',
+  },
+  recentWrap: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e8edf3',
+  },
+  recentTitle: {
+    fontSize: typography.caption,
+    color: '#64748b',
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+  },
+  recentContainer: {
+    borderWidth: 1,
+    borderColor: '#edf2f7',
+    borderRadius: radius.md,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: spacing.sm,
+  },
+  recentRow: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+  },
+  recentRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9eef5',
+  },
+  recentName: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  recentMeta: {
+    fontSize: 12,
+    color: '#7b8794',
+    textTransform: 'capitalize',
+  },
+  recentEmpty: {
+    fontSize: typography.caption,
+    color: '#94a3b8',
   },
   buttonPressed: {
     opacity: 0.88,
