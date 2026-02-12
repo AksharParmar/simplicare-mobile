@@ -1,5 +1,5 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   ActivityIndicator,
@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   UIManager,
   View,
 } from 'react-native';
@@ -18,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdherenceRing } from '../components/AdherenceRing';
 import { DoseActionSheet } from '../components/DoseActionSheet';
-import { ProfileMenuPopup } from '../components/ProfileMenuPopup';
 import { RootTabParamList } from '../navigation/types';
 import { scheduleSnoozeNotification } from '../notifications/notificationScheduler';
 import { useAuth } from '../state/AuthContext';
@@ -63,18 +61,10 @@ export function TodayScreen({ route, navigation }: Props) {
   const { isGuest } = useAuth();
   const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh, currentScope } = useAppState();
-  const { profile, setAvatarFromPicker, removeAvatar } = useProfile();
+  const { profile } = useProfile();
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [profileMenuAnchor, setProfileMenuAnchor] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const avatarButtonRef = useRef<View | null>(null);
 
   const now = new Date();
   const profileName = profile?.displayName?.trim() || (isGuest ? 'Guest' : '');
@@ -221,18 +211,6 @@ export function TodayScreen({ route, navigation }: Props) {
     }
   }
 
-  function openProfileMenu() {
-    if (!avatarButtonRef.current) {
-      setShowProfileMenu(true);
-      return;
-    }
-
-    avatarButtonRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-      setProfileMenuAnchor({ x, y, width, height });
-      setShowProfileMenu(true);
-    });
-  }
-
   return (
     <ScrollView
       contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
@@ -242,7 +220,7 @@ export function TodayScreen({ route, navigation }: Props) {
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>Today</Text>
         </View>
-        <TouchableOpacity ref={avatarButtonRef} style={styles.avatarButton} onPress={openProfileMenu}>
+        <Pressable style={styles.avatarButton} onPress={() => navigation.navigate('Settings')}>
           {profile?.avatarUrl ? (
             <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
           ) : (
@@ -250,7 +228,7 @@ export function TodayScreen({ route, navigation }: Props) {
               {(profileName || 'G').slice(0, 1).toUpperCase()}
             </Text>
           )}
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
@@ -412,25 +390,6 @@ export function TodayScreen({ route, navigation }: Props) {
         onMarkTaken={() => void handleSheetLog('taken')}
         onSkip={() => void handleSheetLog('skipped')}
         onSnooze={() => void handleSnooze()}
-      />
-      <ProfileMenuPopup
-        visible={showProfileMenu}
-        isGuest={isGuest}
-        hasAvatar={Boolean(profile?.avatarPath)}
-        anchor={profileMenuAnchor}
-        onClose={() => setShowProfileMenu(false)}
-        onEditPhoto={() => {
-          setShowProfileMenu(false);
-          void setAvatarFromPicker();
-        }}
-        onRemovePhoto={() => {
-          setShowProfileMenu(false);
-          void removeAvatar();
-        }}
-        onAccountSettings={() => {
-          setShowProfileMenu(false);
-          navigation.navigate('Settings');
-        }}
       />
     </ScrollView>
   );

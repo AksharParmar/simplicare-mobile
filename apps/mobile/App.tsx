@@ -28,6 +28,7 @@ import {
 import { ConfirmScanMedicationScreen } from './src/screens/ConfirmScanMedicationScreen';
 import { CopilotScreen } from './src/screens/CopilotScreen';
 import { EditMedicationScreen } from './src/screens/EditMedicationScreen';
+import { AccountSettingsScreen } from './src/screens/AccountSettingsScreen';
 import { ManualAddMedicationScreen } from './src/screens/ManualAddMedicationScreen';
 import { MedicationDetailScreen } from './src/screens/MedicationDetailScreen';
 import { MyMedicationsScreen } from './src/screens/MyMedicationsScreen';
@@ -137,6 +138,11 @@ function MainStackNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
       <Stack.Screen name="Tabs" options={{ headerShown: false }}>
         {() => <TabsNavigator onOpenAddHub={onOpenAddHub} />}
       </Stack.Screen>
+      <Stack.Screen
+        name="AccountSettings"
+        component={AccountSettingsScreen}
+        options={{ title: 'Account' }}
+      />
       <Stack.Screen
         name="ManualAddMedication"
         component={ManualAddMedicationScreen}

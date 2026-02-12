@@ -2,25 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
-import { useEffect, useMemo, useState } from 'react';
-import * as Haptics from 'expo-haptics';
+import { useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
+  Image,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PasteOcrTextModal } from '../components/PasteOcrTextModal';
-import { getSupabaseClient } from '../config/supabase';
 import { RootStackParamList } from '../navigation/types';
 import {
   cancelMedicationNotificationsForScope,
@@ -29,11 +25,11 @@ import {
   rescheduleAllMedicationNotifications,
   scheduleTestNotificationInOneMinute,
 } from '../notifications/notificationScheduler';
+import { logAvatarStorageDebug, runAvatarStorageDebugProbe } from '../profile/profileApi';
 import { useAppState } from '../state/AppStateContext';
 import { useAuth } from '../state/AuthContext';
 import { usePreferences } from '../state/PreferencesContext';
 import { useProfile } from '../state/ProfileContext';
-import { logAvatarStorageDebug, runAvatarStorageDebugProbe } from '../profile/profileApi';
 import { clearAllScopedData } from '../storage/localStore';
 import { PREFS_KEY } from '../storage/preferencesStore';
 import { resetTutorialFlag, TUTORIAL_SEEN_KEY } from '../storage/tutorialStore';
@@ -48,47 +44,25 @@ export function SettingsScreen() {
   const navigation = useNavigation<Nav>();
   const { state, resetState, currentScope, syncStatus, syncError, retrySync, lastSyncedAt } =
     useAppState();
-  const { isGuest, session, logout, exitGuest } = useAuth();
+  const { isGuest, session } = useAuth();
   const { prefs, updatePrefs } = usePreferences();
-  const {
-    profile,
-    setDisplayName,
-    setAvatarFromPicker,
-    loading: profileLoading,
-    error: profileError,
-    clearError,
-  } = useProfile();
-
-  const [profileNameInput, setProfileNameInput] = useState('');
-  const [emailInput, setEmailInput] = useState(session?.user?.email ?? '');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [emailStatus, setEmailStatus] = useState<string | null>(null);
-  const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
+  const { profile, setAvatarFromPicker, removeAvatar, loading: profileLoading, error: profileError } =
+    useProfile();
 
   const [devMessage, setDevMessage] = useState<string | null>(null);
   const [isPasteModalVisible, setIsPasteModalVisible] = useState(false);
   const [devPastedText, setDevPastedText] = useState('');
 
   const appVersion = useMemo(() => Constants.expoConfig?.version ?? '1.0.0', []);
-
-  useEffect(() => {
-    setProfileNameInput(profile?.displayName ?? '');
-  }, [profile?.displayName]);
-
-  useEffect(() => {
-    setEmailInput(session?.user?.email ?? '');
-  }, [session?.user?.email]);
-
-  async function handleSaveProfileName() {
-    const value = profileNameInput.trim();
-    await setDisplayName(value);
-    await updatePrefs({ displayName: value || (isGuest ? 'Guest' : '') });
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
+  const displayName = profile?.displayName?.trim() || (isGuest ? 'Guest' : 'Not set');
+  const subtitle = isGuest ? 'Guest mode' : session?.user?.email ?? 'Signed in';
 
   async function handleChangeAvatar() {
-    clearError();
     await setAvatarFromPicker();
+  }
+
+  async function handleRemoveAvatar() {
+    await removeAvatar();
   }
 
   async function handleToggleReminders(next: boolean) {
@@ -193,58 +167,6 @@ export function SettingsScreen() {
     );
   }
 
-  async function handleGuestSignIn() {
-    await exitGuest();
-  }
-
-  async function handleLogout() {
-    await logout();
-  }
-
-  async function handleChangeEmail() {
-    if (isGuest) {
-      return;
-    }
-
-    const nextEmail = emailInput.trim();
-    if (!nextEmail) {
-      setEmailStatus('Email is required.');
-      return;
-    }
-
-    const client = getSupabaseClient();
-    const { error } = await client.auth.updateUser({ email: nextEmail });
-    if (error) {
-      setEmailStatus(error.message);
-      return;
-    }
-
-    setEmailStatus('Email update requested. Please confirm from your inbox if required.');
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
-  async function handleChangePassword() {
-    if (isGuest) {
-      return;
-    }
-
-    if (passwordInput.length < 8) {
-      setPasswordStatus('Password must be at least 8 characters.');
-      return;
-    }
-
-    const client = getSupabaseClient();
-    const { error } = await client.auth.updateUser({ password: passwordInput });
-    if (error) {
-      setPasswordStatus(error.message);
-      return;
-    }
-
-    setPasswordStatus('Password updated successfully.');
-    setPasswordInput('');
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
   function handleUseDevText(text: string) {
     const value = text.trim();
     setDevPastedText(value);
@@ -259,257 +181,195 @@ export function SettingsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
+      keyboardShouldPersistTaps="handled"
     >
-      <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>Settings</Text>
+      <Text style={styles.title}>Settings</Text>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          {isGuest ? (
-            <>
-              <View style={styles.rowStatic}>
-                <Text style={styles.rowLabel}>Status</Text>
-                <Text style={styles.rowValue}>Guest mode</Text>
-              </View>
-              <Pressable style={styles.row} onPress={() => void handleGuestSignIn()}>
-                <Text style={styles.rowLabel}>Sign in</Text>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <View style={styles.rowStatic}>
-                <Text style={styles.rowLabel}>Signed in as</Text>
-                <Text style={styles.rowValue}>{session?.user?.email ?? 'Unknown account'}</Text>
-              </View>
-              <Pressable style={styles.row} onPress={() => void handleLogout()}>
-                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Log out</Text>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            </>
-          )}
-
-          <View style={styles.inputWrap}>
-            <Text style={styles.inputLabel}>Display name</Text>
-            <TextInput
-              value={profileNameInput}
-              onChangeText={setProfileNameInput}
-              placeholder={profile?.displayName ?? (isGuest ? 'Guest' : 'Your name')}
-              style={styles.input}
-              returnKeyType="done"
-              onSubmitEditing={() => void handleSaveProfileName()}
-            />
-            <Pressable style={styles.inlineButton} onPress={() => void handleSaveProfileName()}>
-              <Text style={styles.inlineButtonText}>Save name</Text>
-            </Pressable>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Profile</Text>
+        <View style={styles.profileRow}>
+          <View style={styles.avatarPreviewWrap}>
+            {profile?.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.avatarPreviewImage} />
+            ) : (
+              <Text style={styles.avatarPreviewInitial}>{displayName.slice(0, 1).toUpperCase()}</Text>
+            )}
           </View>
+          <View style={styles.profileMeta}>
+            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileSubtitle}>{subtitle}</Text>
+          </View>
+        </View>
 
-          <View style={styles.rowStatic}>
-            <Text style={styles.rowLabel}>Avatar photo</Text>
+        <View style={styles.profileActionsRow}>
+          <Pressable style={({ pressed }) => [styles.pillButton, pressed && styles.buttonPressed]} onPress={() => void handleChangeAvatar()}>
+            <Text style={styles.pillButtonText}>{profile?.avatarPath ? 'Edit photo' : 'Add photo'}</Text>
+          </Pressable>
+          {profile?.avatarPath ? (
             <Pressable
-              style={({ pressed }) => [styles.pillButton, pressed && styles.buttonPressed]}
-              onPress={() => void handleChangeAvatar()}
+              style={({ pressed }) => [styles.pillButtonDanger, pressed && styles.buttonPressed]}
+              onPress={() => void handleRemoveAvatar()}
             >
-              <Text style={styles.pillButtonText}>Change photo</Text>
+              <Text style={styles.pillButtonDangerText}>Remove photo</Text>
             </Pressable>
-          </View>
-          {profileLoading ? <Text style={styles.helperText}>Loading profile...</Text> : null}
-          {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
-
-          {!isGuest ? (
-            <>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>Change email</Text>
-                <TextInput
-                  value={emailInput}
-                  onChangeText={setEmailInput}
-                  placeholder="name@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  style={styles.input}
-                />
-                <Pressable style={styles.inlineButton} onPress={() => void handleChangeEmail()}>
-                  <Text style={styles.inlineButtonText}>Update email</Text>
-                </Pressable>
-                {emailStatus ? <Text style={styles.helperText}>{emailStatus}</Text> : null}
-              </View>
-
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>Change password</Text>
-                <TextInput
-                  value={passwordInput}
-                  onChangeText={setPasswordInput}
-                  placeholder="New password"
-                  secureTextEntry
-                  style={styles.input}
-                />
-                <Pressable style={styles.inlineButton} onPress={() => void handleChangePassword()}>
-                  <Text style={styles.inlineButtonText}>Update password</Text>
-                </Pressable>
-                {passwordStatus ? <Text style={styles.helperText}>{passwordStatus}</Text> : null}
-              </View>
-            </>
           ) : null}
         </View>
 
-        {!isGuest ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Cloud Sync</Text>
-            <View style={styles.rowStatic}>
-              <Text style={styles.rowLabel}>Status</Text>
-              <Text style={styles.rowValue}>
-                {syncStatus === 'syncing'
-                  ? 'Syncing...'
-                  : syncStatus === 'error'
-                    ? 'Sync error'
-                    : lastSyncedAt
-                      ? 'Synced just now'
-                      : 'Not synced yet'}
-              </Text>
-            </View>
-            {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
-            <Pressable style={styles.row} onPress={() => void retrySync()}>
-              <Text style={styles.rowLabel}>Retry sync</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          </View>
-        ) : null}
+        {profileLoading ? <Text style={styles.helperText}>Loading profile...</Text> : null}
+        {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+      </View>
 
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Account</Text>
+        <Pressable style={styles.row} onPress={() => navigation.navigate('AccountSettings')}>
+          <Text style={styles.rowLabel}>Account settings</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+      </View>
+
+      {!isGuest ? (
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Reminders</Text>
+          <Text style={styles.sectionTitle}>Cloud Sync</Text>
           <View style={styles.rowStatic}>
-            <Text style={styles.rowLabel}>Reminders enabled</Text>
-            <Switch
-              value={prefs.remindersEnabled}
-              onValueChange={(next) => {
-                void handleToggleReminders(next);
-              }}
-              trackColor={{ false: '#cbd5e1', true: '#bfdbfe' }}
-              thumbColor={prefs.remindersEnabled ? '#2563eb' : '#ffffff'}
-            />
+            <Text style={styles.rowLabel}>Status</Text>
+            <Text style={styles.rowValue}>
+              {syncStatus === 'syncing'
+                ? 'Syncing...'
+                : syncStatus === 'error'
+                  ? 'Sync error'
+                  : lastSyncedAt
+                    ? 'Synced just now'
+                    : 'Not synced yet'}
+            </Text>
           </View>
-
-          <View style={styles.snoozeWrap}>
-            <Text style={styles.rowLabel}>Default snooze</Text>
-            <View style={styles.segmentedWrap}>
-              {SNOOZE_OPTIONS.map((minutes) => {
-                const active = prefs.defaultSnoozeMinutes === minutes;
-                return (
-                  <Pressable
-                    key={minutes}
-                    style={[styles.segmentedItem, active && styles.segmentedItemActive]}
-                    onPress={() => {
-                      void handleSelectSnooze(minutes);
-                    }}
-                  >
-                    <Text style={[styles.segmentedLabel, active && styles.segmentedLabelActive]}>
-                      {minutes} min
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.rowStatic}>
-            <Text style={styles.rowLabel}>Quiet hours</Text>
-            <Text style={styles.rowValue}>Coming soon</Text>
-          </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Privacy & Data</Text>
-          <View style={styles.rowStatic}>
-            <Text style={styles.rowLabel}>Save scan text locally</Text>
-            <Switch
-              value={prefs.saveScanTextLocally}
-              onValueChange={(next) => {
-                void updatePrefs({ saveScanTextLocally: next });
-              }}
-              trackColor={{ false: '#cbd5e1', true: '#bfdbfe' }}
-              thumbColor={prefs.saveScanTextLocally ? '#2563eb' : '#ffffff'}
-            />
-          </View>
-          <Text style={styles.helperText}>
-            When off, scan text is used only to fill the form and then discarded.
-          </Text>
-
-          <Pressable style={styles.row} onPress={() => void handleExportData()}>
-            <Text style={styles.rowLabel}>Export my data</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-          <Pressable style={styles.row} onPress={confirmDeleteAllData}>
-            <Text style={[styles.rowLabel, styles.destructiveLabel]}>Delete all local data</Text>
+          {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
+          <Pressable style={styles.row} onPress={() => void retrySync()}>
+            <Text style={styles.rowLabel}>Retry sync</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         </View>
+      ) : null}
 
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.rowStatic}>
+          <Text style={styles.rowLabel}>Reminders enabled</Text>
+          <Switch
+            value={prefs.remindersEnabled}
+            onValueChange={(next) => {
+              void handleToggleReminders(next);
+            }}
+            trackColor={{ false: '#cbd5e1', true: '#bfdbfe' }}
+            thumbColor={prefs.remindersEnabled ? '#2563eb' : '#ffffff'}
+          />
+        </View>
+
+        <View style={styles.snoozeWrap}>
+          <Text style={styles.rowLabel}>Default snooze</Text>
+          <View style={styles.segmentedWrap}>
+            {SNOOZE_OPTIONS.map((minutes) => {
+              const active = prefs.defaultSnoozeMinutes === minutes;
+              return (
+                <Pressable
+                  key={minutes}
+                  style={[styles.segmentedItem, active && styles.segmentedItemActive]}
+                  onPress={() => {
+                    void handleSelectSnooze(minutes);
+                  }}
+                >
+                  <Text style={[styles.segmentedLabel, active && styles.segmentedLabelActive]}>
+                    {minutes} min
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Privacy & Data</Text>
+        <View style={styles.rowStatic}>
+          <Text style={styles.rowLabel}>Save scan text locally</Text>
+          <Switch
+            value={prefs.saveScanTextLocally}
+            onValueChange={(next) => {
+              void updatePrefs({ saveScanTextLocally: next });
+            }}
+            trackColor={{ false: '#cbd5e1', true: '#bfdbfe' }}
+            thumbColor={prefs.saveScanTextLocally ? '#2563eb' : '#ffffff'}
+          />
+        </View>
+        <Text style={styles.helperText}>
+          When off, scan text is used only to fill the form and then discarded.
+        </Text>
+
+        <Pressable style={styles.row} onPress={() => void handleExportData()}>
+          <Text style={styles.rowLabel}>Export my data</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={confirmDeleteAllData}>
+          <Text style={[styles.rowLabel, styles.destructiveLabel]}>Delete all local data</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Help</Text>
+        <Pressable style={styles.row} onPress={() => void handleShowTutorialAgain()}>
+          <Text style={styles.rowLabel}>Show tutorial again</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>About</Text>
+        <View style={styles.rowStatic}>
+          <Text style={styles.rowLabel}>Version</Text>
+          <Text style={styles.rowValue}>{appVersion}</Text>
+        </View>
+        <Text style={styles.aboutText}>
+          SimpliCare keeps medication management local-first and privacy friendly.
+        </Text>
+      </View>
+
+      {__DEV__ ? (
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Help</Text>
-          <Pressable style={styles.row} onPress={() => void handleShowTutorialAgain()}>
-            <Text style={styles.rowLabel}>Show tutorial again</Text>
+          <Text style={styles.sectionTitle}>Developer</Text>
+          <Pressable style={styles.row} onPress={() => setIsPasteModalVisible(true)}>
+            <Text style={styles.rowLabel}>Paste OCR text (Dev)</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
+          <Pressable style={styles.row} onPress={() => void handleTestNotification()}>
+            <Text style={styles.rowLabel}>Test notification in 1 minute</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <Pressable style={styles.row} onPress={() => void handleStorageDebugCheck()}>
+            <Text style={styles.rowLabel}>Avatar Storage Debug</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <Text style={styles.devHelper}>Developer tools</Text>
+          {devPastedText ? (
+            <Text style={styles.devMessage}>Loaded OCR text ({devPastedText.length} chars)</Text>
+          ) : null}
+          {devMessage ? <Text style={styles.devMessage}>{devMessage}</Text> : null}
         </View>
+      ) : null}
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <View style={styles.rowStatic}>
-            <Text style={styles.rowLabel}>Version</Text>
-            <Text style={styles.rowValue}>{appVersion}</Text>
-          </View>
-          <Text style={styles.aboutText}>
-            SimpliCare keeps medication management local-first and privacy friendly.
-          </Text>
-        </View>
-
-        {__DEV__ ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Developer</Text>
-            <Pressable style={styles.row} onPress={() => setIsPasteModalVisible(true)}>
-              <Text style={styles.rowLabel}>Paste OCR text (Dev)</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-            <Pressable style={styles.row} onPress={() => void handleTestNotification()}>
-              <Text style={styles.rowLabel}>Test notification in 1 minute</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-            <Pressable style={styles.row} onPress={() => void handleStorageDebugCheck()}>
-              <Text style={styles.rowLabel}>Avatar Storage Debug</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-            <Text style={styles.devHelper}>Developer tools</Text>
-            {devPastedText ? (
-              <Text style={styles.devMessage}>Loaded OCR text ({devPastedText.length} chars)</Text>
-            ) : null}
-            {devMessage ? <Text style={styles.devMessage}>{devMessage}</Text> : null}
-          </View>
-        ) : null}
-
-        <PasteOcrTextModal
-          visible={isPasteModalVisible}
-          initialText={devPastedText}
-          title="Paste OCR text (Dev)"
-          onUseText={handleUseDevText}
-          onClose={() => setIsPasteModalVisible(false)}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <PasteOcrTextModal
+        visible={isPasteModalVisible}
+        initialText={devPastedText}
+        title="Paste OCR text (Dev)"
+        onUseText={handleUseDevText}
+        onClose={() => setIsPasteModalVisible(false)}
+      />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
   container: {
     backgroundColor: '#f8fafc',
     paddingHorizontal: spacing.lg,
@@ -534,6 +394,49 @@ const styles = StyleSheet.create({
     fontSize: typography.subtitle,
     fontWeight: '700',
     color: '#0f172a',
+  },
+  profileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  avatarPreviewWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPreviewInitial: {
+    fontSize: typography.body,
+    color: '#334155',
+    fontWeight: '700',
+  },
+  profileMeta: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: typography.body,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  profileSubtitle: {
+    fontSize: typography.caption,
+    color: '#64748b',
+    marginTop: spacing.xs,
+  },
+  profileActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   row: {
     minHeight: 48,
@@ -567,39 +470,6 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: -1,
   },
-  inputWrap: {
-    borderTopWidth: 1,
-    borderTopColor: '#eef2f7',
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
-  },
-  inputLabel: {
-    fontSize: typography.caption,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  input: {
-    minHeight: 48,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: spacing.md,
-    color: '#0f172a',
-    fontSize: typography.body,
-  },
-  inlineButton: {
-    minHeight: 44,
-    borderRadius: radius.md,
-    backgroundColor: '#0f172a',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inlineButtonText: {
-    color: '#ffffff',
-    fontSize: typography.caption,
-    fontWeight: '700',
-  },
   pillButton: {
     minHeight: 40,
     borderRadius: radius.md,
@@ -612,6 +482,21 @@ const styles = StyleSheet.create({
   },
   pillButtonText: {
     color: '#334155',
+    fontSize: typography.caption,
+    fontWeight: '700',
+  },
+  pillButtonDanger: {
+    minHeight: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillButtonDangerText: {
+    color: '#b91c1c',
     fontSize: typography.caption,
     fontWeight: '700',
   },
