@@ -3,7 +3,10 @@ import Constants from 'expo-constants';
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -11,13 +14,16 @@ import {
   Switch,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   cancelAllMedicationNotifications,
+  getScheduledNotificationCount,
   rescheduleAllMedicationNotifications,
+  scheduleTestNotificationInOneMinute,
 } from '../notifications/notificationScheduler';
 import { useAppState } from '../state/AppStateContext';
 import { usePreferences } from '../state/PreferencesContext';
@@ -35,6 +41,7 @@ export function SettingsScreen() {
 
   const [isNameModalVisible, setIsNameModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState(prefs.displayName);
+  const [devMessage, setDevMessage] = useState<string | null>(null);
 
   const appVersion = useMemo(() => Constants.expoConfig?.version ?? '1.0.0', []);
 
@@ -114,6 +121,12 @@ export function SettingsScreen() {
   async function handleShowTutorialAgain() {
     await resetTutorialFlag();
     Alert.alert('Tutorial reset', 'Quick start will appear next app launch.');
+  }
+
+  async function handleTestNotification() {
+    await scheduleTestNotificationInOneMinute();
+    const scheduledCount = await getScheduledNotificationCount();
+    setDevMessage(`Test reminder scheduled. Total scheduled: ${scheduledCount}`);
   }
 
   return (
@@ -204,30 +217,52 @@ export function SettingsScreen() {
         </Text>
       </View>
 
+      {__DEV__ ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Developer</Text>
+          <Pressable style={styles.row} onPress={() => void handleTestNotification()}>
+            <Text style={styles.rowLabel}>Test notification in 1 minute</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <Text style={styles.devHelper}>Developer tool</Text>
+          {devMessage ? <Text style={styles.devMessage}>{devMessage}</Text> : null}
+        </View>
+      ) : null}
+
       <Modal
         visible={isNameModalVisible}
         animationType="slide"
         transparent
         onRequestClose={() => setIsNameModalVisible(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setIsNameModalVisible(false)}>
-          <Pressable style={styles.modalCard} onPress={() => undefined}>
-            <Text style={styles.modalTitle}>Display name</Text>
-            <TextInput
-              value={nameInput}
-              onChangeText={setNameInput}
-              placeholder="Enter your name"
-              style={styles.input}
-              autoCapitalize="words"
-            />
-            <Pressable style={styles.primaryButton} onPress={() => void saveName()}>
-              <Text style={styles.primaryButtonText}>Save</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            style={styles.modalAvoiding}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+          >
+            <Pressable style={styles.modalBackdrop} onPress={() => setIsNameModalVisible(false)}>
+              <Pressable style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, spacing.sm) }]} onPress={() => undefined}>
+                <Text style={styles.modalTitle}>Display name</Text>
+                <TextInput
+                  value={nameInput}
+                  onChangeText={setNameInput}
+                  placeholder="Enter your name"
+                  style={styles.input}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  onSubmitEditing={() => void saveName()}
+                />
+                <Pressable style={styles.primaryButton} onPress={() => void saveName()}>
+                  <Text style={styles.primaryButtonText}>Save</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={() => setIsNameModalVisible(false)}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </Pressable>
+              </Pressable>
             </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={() => setIsNameModalVisible(false)}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </ScrollView>
   );
@@ -321,11 +356,24 @@ const styles = StyleSheet.create({
   segmentedLabelActive: {
     color: '#ffffff',
   },
+  devHelper: {
+    fontSize: typography.caption,
+    color: '#64748b',
+    marginTop: spacing.xs,
+  },
+  devMessage: {
+    fontSize: typography.caption,
+    color: '#334155',
+    marginTop: spacing.xs,
+  },
   aboutText: {
     fontSize: typography.caption,
     color: '#64748b',
     marginTop: spacing.xs,
     lineHeight: 20,
+  },
+  modalAvoiding: {
+    flex: 1,
   },
   modalBackdrop: {
     flex: 1,

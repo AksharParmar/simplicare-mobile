@@ -123,74 +123,74 @@ export function EditMedicationScreen({ route, navigation }: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>Edit medication</Text>
+        <Text style={styles.title}>Edit medication</Text>
 
-      <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Medication name</Text>
-        <TextInput value={name} onChangeText={setName} style={styles.input} />
-      </View>
-
-      <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Strength</Text>
-        <TextInput
-          value={strength}
-          onChangeText={setStrength}
-          placeholder="e.g., 10 mg, 500 mg, 20 mcg, 5 mL"
-          style={styles.input}
-        />
-        <Text style={styles.helperText}>What&apos;s printed on the label (dose strength).</Text>
-      </View>
-
-      <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Instructions</Text>
-        <TextInput
-          value={instructions}
-          onChangeText={setInstructions}
-          placeholder="Any extra instructions? e.g., Take with food, Take at bedtime"
-          style={[styles.input, styles.multiline]}
-          multiline
-        />
-        <Text style={styles.helperText}>Optional notes you want to remember.</Text>
-      </View>
-
-      <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Dose times</Text>
-        <View style={styles.timeRow}>
-          <TextInput value={timeInput} onChangeText={setTimeInput} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" />
-          <Pressable
-            style={({ pressed }) => [styles.addTimeButton, pressed && styles.buttonPressed]}
-            onPress={addTime}
-          >
-            <Text style={styles.addTimeText}>Add time</Text>
-          </Pressable>
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Medication name</Text>
+          <TextInput value={name} onChangeText={setName} style={styles.input} />
         </View>
 
-        <View style={styles.chipWrap}>
-          {times.map((time) => (
-            <Pressable key={time} style={styles.chip} onPress={() => removeTime(time)}>
-              <Text style={styles.chipText}>{formatHHMMTo12Hour(time)}  ×</Text>
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Strength</Text>
+          <TextInput
+            value={strength}
+            onChangeText={setStrength}
+            placeholder="e.g., 10 mg, 500 mg, 20 mcg, 5 mL"
+            style={styles.input}
+          />
+          <Text style={styles.helperText}>What&apos;s printed on the label (dose strength).</Text>
+        </View>
+
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Instructions</Text>
+          <TextInput
+            value={instructions}
+            onChangeText={setInstructions}
+            placeholder="Any extra instructions? e.g., Take with food, Take at bedtime"
+            style={[styles.input, styles.multiline]}
+            multiline
+          />
+          <Text style={styles.helperText}>Optional notes you want to remember.</Text>
+        </View>
+
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Dose times</Text>
+          <View style={styles.timeRow}>
+            <TextInput value={timeInput} onChangeText={setTimeInput} style={[styles.input, styles.timeInput]} keyboardType="numbers-and-punctuation" />
+            <Pressable
+              style={({ pressed }) => [styles.addTimeButton, pressed && styles.buttonPressed]}
+              onPress={addTime}
+            >
+              <Text style={styles.addTimeText}>Add time</Text>
             </Pressable>
-          ))}
+          </View>
+
+          <View style={styles.chipWrap}>
+            {times.map((time) => (
+              <Pressable key={time} style={styles.chip} onPress={() => removeTime(time)}>
+                <Text style={styles.chipText}>{formatHHMMTo12Hour(time)}  ×</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
-      </View>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.saveButton,
-          !canSave && styles.saveButtonDisabled,
-          pressed && styles.buttonPressed,
-        ]}
-        onPress={() => void handleSave()}
-        disabled={!canSave}
-      >
-        <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save changes'}</Text>
-      </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.saveButton,
+            !canSave && styles.saveButtonDisabled,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => void handleSave()}
+          disabled={!canSave}
+        >
+          <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save changes'}</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -6,11 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DoseActionSheet } from '../components/DoseActionSheet';
 import { RootTabParamList } from '../navigation/types';
-import {
-  getScheduledNotificationCount,
-  scheduleSnoozeNotification,
-  scheduleTestNotificationInOneMinute,
-} from '../notifications/notificationScheduler';
+import { scheduleSnoozeNotification } from '../notifications/notificationScheduler';
 import { usePreferences } from '../state/PreferencesContext';
 import { useAppState } from '../state/AppStateContext';
 import { radius, spacing, typography } from '../theme/tokens';
@@ -36,7 +32,6 @@ export function TodayScreen({ route, navigation }: Props) {
   const { state, isLoading, addDoseLog, refresh } = useAppState();
   const [submitting, setSubmitting] = useState(false);
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
-  const [debugInfo, setDebugInfo] = useState('');
   const [banner, setBanner] = useState<string | null>(null);
 
   const greeting = prefs.displayName.trim() ? `Hi, ${prefs.displayName.trim()}` : 'Hi there';
@@ -148,12 +143,6 @@ export function TodayScreen({ route, navigation }: Props) {
     }
   }
 
-  async function runDebugNotification() {
-    await scheduleTestNotificationInOneMinute();
-    const scheduledCount = await getScheduledNotificationCount();
-    setDebugInfo(`Scheduled notifications: ${scheduledCount}`);
-  }
-
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.greeting}>{greeting}</Text>
@@ -216,15 +205,6 @@ export function TodayScreen({ route, navigation }: Props) {
             </Pressable>
           ))
         : null}
-
-      {__DEV__ ? (
-        <View style={styles.debugWrap}>
-          <Pressable style={styles.debugButton} onPress={() => void runDebugNotification()}>
-            <Text style={styles.debugText}>Test notification in 1 minute</Text>
-          </Pressable>
-          {debugInfo ? <Text style={styles.debugInfo}>{debugInfo}</Text> : null}
-        </View>
-      ) : null}
 
       <DoseActionSheet
         visible={Boolean(selectedDose)}
@@ -417,29 +397,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   cardHint: {
-    fontSize: typography.caption,
-    color: '#64748b',
-  },
-  debugWrap: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  debugButton: {
-    minHeight: 48,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  debugText: {
-    fontSize: typography.body,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  debugInfo: {
-    marginTop: spacing.xs,
     fontSize: typography.caption,
     color: '#64748b',
   },

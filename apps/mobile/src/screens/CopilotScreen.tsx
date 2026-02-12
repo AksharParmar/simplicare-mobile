@@ -85,7 +85,7 @@ export function CopilotScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 76 : 0}
     >
       <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>

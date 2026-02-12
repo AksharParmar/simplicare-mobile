@@ -163,10 +163,13 @@ export function MyMedicationsScreen({ navigation, route }: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
     >
-      <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={styles.headerRow}>
         <Text style={styles.title}>Medications</Text>
         <Pressable
