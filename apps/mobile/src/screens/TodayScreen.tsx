@@ -63,7 +63,7 @@ export function TodayScreen({ route, navigation }: Props) {
   const { isGuest } = useAuth();
   const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh, currentScope } = useAppState();
-  const { profile, setAvatarFromPicker } = useProfile();
+  const { profile, setAvatarFromPicker, removeAvatar } = useProfile();
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -416,11 +416,16 @@ export function TodayScreen({ route, navigation }: Props) {
       <ProfileMenuPopup
         visible={showProfileMenu}
         isGuest={isGuest}
+        hasAvatar={Boolean(profile?.avatarPath)}
         anchor={profileMenuAnchor}
         onClose={() => setShowProfileMenu(false)}
         onEditPhoto={() => {
           setShowProfileMenu(false);
           void setAvatarFromPicker();
+        }}
+        onRemovePhoto={() => {
+          setShowProfileMenu(false);
+          void removeAvatar();
         }}
         onAccountSettings={() => {
           setShowProfileMenu(false);

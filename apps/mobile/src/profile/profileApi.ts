@@ -91,14 +91,22 @@ export async function uploadAvatar(
 
   const response = await fetch(fileUri);
   const blob = await response.blob();
-  const extension = mimeType?.includes('png') ? 'png' : 'jpg';
-  const contentType = mimeType ?? (extension === 'png' ? 'image/png' : 'image/jpeg');
-  const avatarPath = `${userId}/avatar.${extension}`;
+  const contentType = mimeType ?? 'image/jpeg';
+  const avatarPath = `${userId}/avatar.jpg`;
 
-  const { error } = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
+  let { error } = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
     contentType,
     upsert: true,
   });
+
+  if (error && /already exists|duplicate|conflict/i.test(error.message)) {
+    await client.storage.from(AVATARS_BUCKET).remove([avatarPath]);
+    const retry = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
+      contentType,
+      upsert: true,
+    });
+    error = retry.error;
+  }
 
   if (error) {
     if (__DEV__) {
@@ -123,10 +131,17 @@ export async function uploadAvatar(
     throw new Error(error.message);
   }
 
+  avatarUrlCache.delete(avatarPath);
   return avatarPath;
 }
 
-export async function getAvatarSignedUrl(avatarPath: string): Promise<string> {
+export async function removeAvatarFile(avatarPath: string): Promise<void> {
+  const client = getSupabaseClient();
+  await client.storage.from(AVATARS_BUCKET).remove([avatarPath]);
+  avatarUrlCache.delete(avatarPath);
+}
+
+export async function getAvatarUrl(avatarPath: string): Promise<string> {
   const cached = avatarUrlCache.get(avatarPath);
   const now = Date.now();
   if (cached && cached.expiresAt > now) {
@@ -134,17 +149,26 @@ export async function getAvatarSignedUrl(avatarPath: string): Promise<string> {
   }
 
   const client = getSupabaseClient();
-  const { data, error } = await client.storage.from(AVATARS_BUCKET).createSignedUrl(avatarPath, 3600);
-  if (error || !data?.signedUrl) {
-    throw new Error(error?.message ?? 'Could not create signed URL');
+  const signed = await client.storage.from(AVATARS_BUCKET).createSignedUrl(avatarPath, 3600);
+  if (!signed.error && signed.data?.signedUrl) {
+    avatarUrlCache.set(avatarPath, {
+      url: signed.data.signedUrl,
+      expiresAt: now + 5 * 60 * 1000,
+    });
+    return signed.data.signedUrl;
   }
 
-  avatarUrlCache.set(avatarPath, {
-    url: data.signedUrl,
-    expiresAt: now + 5 * 60 * 1000,
-  });
+  const publicUrl = client.storage.from(AVATARS_BUCKET).getPublicUrl(avatarPath).data.publicUrl;
+  if (!publicUrl) {
+    throw new Error(signed.error?.message ?? 'Could not create avatar URL');
+  }
 
-  return data.signedUrl;
+  const cacheBusted = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${now}`;
+  avatarUrlCache.set(avatarPath, {
+    url: cacheBusted,
+    expiresAt: now + 60 * 1000,
+  });
+  return cacheBusted;
 }
 
 export async function assertAvatarsBucketExists(): Promise<BucketCheckResult> {
@@ -159,7 +183,7 @@ export async function assertAvatarsBucketExists(): Promise<BucketCheckResult> {
     return {
       ok: false,
       message:
-        "Unable to list buckets (permissions). Verify 'avatars' bucket exists and storage policies allow access.",
+        "Cannot verify buckets (permissions). Ensure 'avatars' exists and policies allow access.",
     };
   }
 

@@ -8,25 +8,29 @@ import { radius, spacing, typography } from '../theme/tokens';
 type Props = {
   visible: boolean;
   isGuest: boolean;
+  hasAvatar: boolean;
   anchor?: { x: number; y: number; width: number; height: number } | null;
   onClose: () => void;
   onEditPhoto: () => void;
+  onRemovePhoto: () => void;
   onAccountSettings: () => void;
 };
 
 export function ProfileMenuPopup({
   visible,
   isGuest,
+  hasAvatar,
   anchor,
   onClose,
   onEditPhoto,
+  onRemovePhoto,
   onAccountSettings,
 }: Props) {
   const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
   const screen = Dimensions.get('window');
-  const menuWidth = Math.min(252, Math.max(220, screen.width - spacing.lg * 2));
+  const menuWidth = Math.min(238, Math.max(220, screen.width - spacing.lg * 2));
   const defaultRight = spacing.lg;
   const fallbackTop = insets.top + 62;
   const preferredTop = (anchor?.y ?? fallbackTop) + (anchor?.height ?? 0) + spacing.sm;
@@ -81,7 +85,17 @@ export function ProfileMenuPopup({
               onPress={onEditPhoto}
               disabled={isGuest}
             >
-              <Text style={[styles.optionText, isGuest && styles.disabledText]}>Edit profile photo</Text>
+              <Text style={[styles.optionText, isGuest && styles.disabledText]}>Change photo</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.optionButton, (isGuest || !hasAvatar) && styles.disabledButton]}
+              onPress={onRemovePhoto}
+              disabled={isGuest || !hasAvatar}
+            >
+              <Text style={[styles.optionText, (isGuest || !hasAvatar) && styles.disabledText]}>
+                Remove photo
+              </Text>
             </Pressable>
 
             {isGuest ? <Text style={styles.helper}>Sign in to save a photo</Text> : null}

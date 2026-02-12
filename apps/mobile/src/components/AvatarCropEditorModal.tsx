@@ -175,7 +175,7 @@ export function AvatarCropEditorModal({ visible, imageUri, onCancel, onSave }: P
           { resize: { width: 512, height: 512 } },
         ],
         {
-          compress: 0.9,
+          compress: 0.85,
           format: ImageManipulator.SaveFormat.JPEG,
         },
       );

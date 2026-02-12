@@ -28,3 +28,15 @@ After changing `.env`, restart Expo so config reloads:
 ```bash
 npx expo start -c
 ```
+
+## 4. Avatar storage bucket setup
+
+Create a Supabase Storage bucket named `avatars` (all lowercase).
+
+- Recommended: private bucket with signed URLs.
+- Path convention used by the app: `<userId>/avatar.jpg`
+- If you enforce MIME allowlists in bucket settings, include:
+  - `image/jpeg`
+  - `image/png`
+  - `image/heic`
+  - `image/heif`

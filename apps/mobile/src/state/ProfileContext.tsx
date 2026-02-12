@@ -7,8 +7,9 @@ import { Alert } from 'react-native';
 import { AvatarCropEditorModal } from '../components/AvatarCropEditorModal';
 import {
   assertAvatarsBucketExists,
-  getAvatarSignedUrl,
+  getAvatarUrl,
   getOrCreateProfile,
+  removeAvatarFile,
   updateProfile,
   uploadAvatar,
 } from '../profile/profileApi';
@@ -28,6 +29,7 @@ type ProfileContextValue = {
   refreshProfile: () => Promise<void>;
   setDisplayName: (name: string) => Promise<void>;
   setAvatarFromPicker: () => Promise<void>;
+  removeAvatar: () => Promise<void>;
   clearError: () => void;
 };
 
@@ -86,9 +88,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       }
 
       const remoteProfile = await getOrCreateProfile(user.id);
-      const avatarUrl = remoteProfile.avatarPath
-        ? await getAvatarSignedUrl(remoteProfile.avatarPath)
-        : null;
+      const avatarUrl = remoteProfile.avatarPath ? await getAvatarUrl(remoteProfile.avatarPath) : null;
 
       setProfile({
         ...remoteProfile,
@@ -192,6 +192,28 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   }, [isGuest, user, refreshProfile]);
 
+  const removeAvatar = useCallback(async () => {
+    setError(null);
+
+    if (isGuest || !user) {
+      setError('Sign in to manage a profile photo.');
+      return;
+    }
+
+    if (!profile?.avatarPath) {
+      return;
+    }
+
+    try {
+      await removeAvatarFile(profile.avatarPath);
+      await updateProfile(user.id, { avatarPath: null });
+      await refreshProfile();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : 'Failed to remove profile photo.');
+    }
+  }, [isGuest, user, profile?.avatarPath, refreshProfile]);
+
   const value = useMemo(
     () => ({
       profile,
@@ -200,9 +222,10 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       setDisplayName,
       setAvatarFromPicker,
+      removeAvatar,
       clearError: () => setError(null),
     }),
-    [profile, loading, error, refreshProfile, setDisplayName, setAvatarFromPicker],
+    [profile, loading, error, refreshProfile, setDisplayName, setAvatarFromPicker, removeAvatar],
   );
 
   return (
