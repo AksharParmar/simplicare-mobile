@@ -8,12 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AddHubActionSheet } from './src/components/AddHubActionSheet';
 import { TutorialModal } from './src/components/TutorialModal';
+import { AuthStackNavigator } from './src/navigation/AuthStack';
 import { RootStackParamList, RootTabParamList } from './src/navigation/types';
 import {
   DoseReminderPayload,
@@ -34,6 +35,7 @@ import { ScanAddMedicationScreen } from './src/screens/ScanAddMedicationScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { AppStateProvider } from './src/state/AppStateContext';
+import { AuthProvider, useAuth } from './src/state/AuthContext';
 import { PreferencesProvider } from './src/state/PreferencesContext';
 import { hasSeenTutorial, setHasSeenTutorial } from './src/storage/tutorialStore';
 import { spacing, typography } from './src/theme/tokens';
@@ -126,7 +128,54 @@ function TabsNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
   );
 }
 
+function MainStackNavigator({ onOpenAddHub }: { onOpenAddHub: () => void }) {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="Tabs" options={{ headerShown: false }}>
+        {() => <TabsNavigator onOpenAddHub={onOpenAddHub} />}
+      </Stack.Screen>
+      <Stack.Screen
+        name="ManualAddMedication"
+        component={ManualAddMedicationScreen}
+        options={{ title: 'Add Medication' }}
+      />
+      <Stack.Screen
+        name="ScanAddMedication"
+        component={ScanAddMedicationScreen}
+        options={{ title: 'Scan Label' }}
+      />
+      <Stack.Screen
+        name="ConfirmScanMedication"
+        component={ConfirmScanMedicationScreen}
+        options={{ title: 'Confirm Scan' }}
+      />
+      <Stack.Screen
+        name="MedicationDetail"
+        component={MedicationDetailScreen}
+        options={{ title: 'Medication' }}
+      />
+      <Stack.Screen
+        name="EditMedication"
+        component={EditMedicationScreen}
+        options={{ title: 'Edit Medication' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function SplashGate() {
+  return (
+    <View style={styles.splashWrap}>
+      <ActivityIndicator size="large" color="#0f172a" />
+      <Text style={styles.splashText}>Loading SimpliCare...</Text>
+    </View>
+  );
+}
+
 function AppShell() {
+  const { loading, isGuest, session } = useAuth();
+  const canAccessApp = isGuest || Boolean(session);
+
   const [isTutorialVisible, setIsTutorialVisible] = useState(false);
   const [isAddHubVisible, setIsAddHubVisible] = useState(false);
   const [queuedReminder, setQueuedReminder] = useState<DoseReminderPayload | null>(null);
@@ -147,15 +196,24 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
+    if (!canAccessApp) {
+      return;
+    }
+
     async function setupNotifications() {
       await configureNotificationChannel();
       await requestNotificationPermissions();
     }
 
     void setupNotifications();
-  }, []);
+  }, [canAccessApp]);
 
   useEffect(() => {
+    if (!canAccessApp) {
+      setIsTutorialVisible(false);
+      return;
+    }
+
     async function checkTutorialModal() {
       const seen = await hasSeenTutorial();
       if (!seen) {
@@ -164,9 +222,13 @@ function AppShell() {
     }
 
     void checkTutorialModal();
-  }, []);
+  }, [canAccessApp]);
 
   useEffect(() => {
+    if (!canAccessApp) {
+      return;
+    }
+
     const subscription = addDoseReminderResponseListener(openDoseReminder);
 
     async function handleInitialResponse() {
@@ -181,7 +243,7 @@ function AppShell() {
     return () => {
       subscription.remove();
     };
-  }, [openDoseReminder]);
+  }, [canAccessApp, openDoseReminder]);
 
   async function handleCloseTutorial() {
     await setHasSeenTutorial(true);
@@ -207,12 +269,16 @@ function AppShell() {
     navigationRef.navigate('ManualAddMedication');
   }
 
+  if (loading) {
+    return <SplashGate />;
+  }
+
   return (
     <>
       <NavigationContainer
         ref={navigationRef}
         onReady={() => {
-          if (queuedReminder) {
+          if (queuedReminder && canAccessApp) {
             navigationRef.navigate('Tabs', {
               screen: 'Home',
               params: {
@@ -225,50 +291,25 @@ function AppShell() {
         }}
       >
         <StatusBar style="dark" />
-        <Stack.Navigator>
-          <Stack.Screen name="Tabs" options={{ headerShown: false }}>
-            {() => <TabsNavigator onOpenAddHub={() => setIsAddHubVisible(true)} />}
-          </Stack.Screen>
-          <Stack.Screen
-            name="ManualAddMedication"
-            component={ManualAddMedicationScreen}
-            options={{ title: 'Add Medication' }}
-          />
-          <Stack.Screen
-            name="ScanAddMedication"
-            component={ScanAddMedicationScreen}
-            options={{ title: 'Scan Label' }}
-          />
-          <Stack.Screen
-            name="ConfirmScanMedication"
-            component={ConfirmScanMedicationScreen}
-            options={{ title: 'Confirm Scan' }}
-          />
-          <Stack.Screen
-            name="MedicationDetail"
-            component={MedicationDetailScreen}
-            options={{ title: 'Medication' }}
-          />
-          <Stack.Screen
-            name="EditMedication"
-            component={EditMedicationScreen}
-            options={{ title: 'Edit Medication' }}
-          />
-        </Stack.Navigator>
+        {canAccessApp ? <MainStackNavigator onOpenAddHub={() => setIsAddHubVisible(true)} /> : <AuthStackNavigator />}
       </NavigationContainer>
 
-      <AddHubActionSheet
-        visible={isAddHubVisible}
-        onClose={() => setIsAddHubVisible(false)}
-        onScanLabel={handleOpenScan}
-        onAddManual={handleOpenManual}
-      />
+      {canAccessApp ? (
+        <>
+          <AddHubActionSheet
+            visible={isAddHubVisible}
+            onClose={() => setIsAddHubVisible(false)}
+            onScanLabel={handleOpenScan}
+            onAddManual={handleOpenManual}
+          />
 
-      <TutorialModal
-        visible={isTutorialVisible}
-        onClose={() => void handleCloseTutorial()}
-        onAddMedication={() => void handleAddMedicationFromTutorial()}
-      />
+          <TutorialModal
+            visible={isTutorialVisible}
+            onClose={() => void handleCloseTutorial()}
+            onAddMedication={() => void handleAddMedicationFromTutorial()}
+          />
+        </>
+      ) : null}
     </>
   );
 }
@@ -278,9 +319,11 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <PreferencesProvider>
-          <AppStateProvider>
-            <AppShell />
-          </AppStateProvider>
+          <AuthProvider>
+            <AppStateProvider>
+              <AppShell />
+            </AppStateProvider>
+          </AuthProvider>
         </PreferencesProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -290,6 +333,18 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  splashWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    gap: spacing.sm,
+  },
+  splashText: {
+    color: '#334155',
+    fontSize: typography.body,
+    fontWeight: '600',
   },
   placeholder: {
     flex: 1,

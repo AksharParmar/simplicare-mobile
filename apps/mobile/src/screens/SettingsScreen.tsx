@@ -30,6 +30,7 @@ import {
   scheduleTestNotificationInOneMinute,
 } from '../notifications/notificationScheduler';
 import { useAppState } from '../state/AppStateContext';
+import { useAuth } from '../state/AuthContext';
 import { usePreferences } from '../state/PreferencesContext';
 import { STORE_KEY } from '../storage/localStore';
 import { PREFS_KEY } from '../storage/preferencesStore';
@@ -44,6 +45,7 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const { state, resetState } = useAppState();
+  const { isGuest, session, logout, exitGuest } = useAuth();
   const { prefs, updatePrefs } = usePreferences();
 
   const [isNameModalVisible, setIsNameModalVisible] = useState(false);
@@ -139,6 +141,14 @@ export function SettingsScreen() {
     setDevMessage(`Test reminder scheduled. Total scheduled: ${scheduledCount}`);
   }
 
+  async function handleGuestSignIn() {
+    await exitGuest();
+  }
+
+  async function handleLogout() {
+    await logout();
+  }
+
   function handleUseDevText(text: string) {
     const value = text.trim();
     setDevPastedText(value);
@@ -155,6 +165,33 @@ export function SettingsScreen() {
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.title}>Settings</Text>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Account</Text>
+        {isGuest ? (
+          <>
+            <View style={styles.rowStatic}>
+              <Text style={styles.rowLabel}>Status</Text>
+              <Text style={styles.rowValue}>Guest mode</Text>
+            </View>
+            <Pressable style={styles.row} onPress={() => void handleGuestSignIn()}>
+              <Text style={styles.rowLabel}>Sign in</Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <View style={styles.rowStatic}>
+              <Text style={styles.rowLabel}>Signed in as</Text>
+              <Text style={styles.rowValue}>{session?.user?.email ?? 'Unknown account'}</Text>
+            </View>
+            <Pressable style={styles.row} onPress={() => void handleLogout()}>
+              <Text style={[styles.rowLabel, styles.destructiveLabel]}>Log out</Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Profile</Text>
