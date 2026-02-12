@@ -33,7 +33,7 @@ import { useAppState } from '../state/AppStateContext';
 import { useAuth } from '../state/AuthContext';
 import { usePreferences } from '../state/PreferencesContext';
 import { useProfile } from '../state/ProfileContext';
-import { logAvatarStorageDebug, runAvatarStorageDebugCheck } from '../profile/profileApi';
+import { logAvatarStorageDebug, runAvatarStorageDebugProbe } from '../profile/profileApi';
 import { clearAllScopedData } from '../storage/localStore';
 import { PREFS_KEY } from '../storage/preferencesStore';
 import { resetTutorialFlag, TUTORIAL_SEEN_KEY } from '../storage/tutorialStore';
@@ -169,14 +169,28 @@ export function SettingsScreen() {
 
   async function handleStorageDebugCheck() {
     const currentUserId = session?.user?.id ?? null;
-    logAvatarStorageDebug({ userId: currentUserId, path: currentUserId ? `${currentUserId}/avatar.jpg` : undefined });
-    const result = await runAvatarStorageDebugCheck();
-    if (result.ok) {
-      setDevMessage(`Storage buckets: ${result.bucketNames.join(', ')}`);
+    const path = currentUserId ? `${currentUserId}/avatar.jpg` : undefined;
+    logAvatarStorageDebug({
+      userId: currentUserId,
+      path,
+      contentType: 'image/jpeg',
+    });
+
+    if (!currentUserId) {
+      setDevMessage('Storage Debug requires a signed-in user.');
       return;
     }
 
-    setDevMessage(result.message ?? "Unable to list buckets (permissions). Verify bucket 'avatars' exists in Dashboard -> Storage.");
+    const result = await runAvatarStorageDebugProbe(currentUserId);
+    if (result.ok) {
+      setDevMessage(`Avatar storage probe OK for path ${path}`);
+      return;
+    }
+
+    setDevMessage(
+      result.message ??
+        "Storage policy blocked. Confirm Storage->avatars policies allow INSERT/UPDATE/SELECT for authenticated.",
+    );
   }
 
   async function handleGuestSignIn() {
@@ -468,7 +482,7 @@ export function SettingsScreen() {
               <Text style={styles.chevron}>›</Text>
             </Pressable>
             <Pressable style={styles.row} onPress={() => void handleStorageDebugCheck()}>
-              <Text style={styles.rowLabel}>Storage Debug</Text>
+              <Text style={styles.rowLabel}>Avatar Storage Debug</Text>
               <Text style={styles.chevron}>›</Text>
             </Pressable>
             <Text style={styles.devHelper}>Developer tools</Text>

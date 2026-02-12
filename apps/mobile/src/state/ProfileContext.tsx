@@ -6,7 +6,6 @@ import { Alert } from 'react-native';
 
 import { AvatarCropEditorModal } from '../components/AvatarCropEditorModal';
 import {
-  assertAvatarsBucketExists,
   getAvatarUrl,
   getOrCreateProfile,
   logAvatarStorageDebug,
@@ -81,11 +80,6 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (!user) {
         setProfile(null);
         return;
-      }
-
-      const bucketCheck = await assertAvatarsBucketExists();
-      if (!bucketCheck.ok) {
-        setError(bucketCheck.message ?? 'Supabase avatars bucket check failed.');
       }
 
       const remoteProfile = await getOrCreateProfile(user.id);
@@ -176,18 +170,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const bucketCheck = await assertAvatarsBucketExists();
-      if (!bucketCheck.ok) {
-        setError(bucketCheck.message ?? "Supabase bucket 'avatars' check failed.");
-        Alert.alert('Upload failed', 'Upload failed. Check Storage bucket + policies.');
-        return;
-      }
-
       logAvatarStorageDebug({
         userId: user.id,
         path: `${user.id}/avatar.jpg`,
         assetUri: cropResult.uri,
         assetMimeType: cropResult.mimeType,
+        contentType: 'image/jpeg',
       });
 
       const avatarPath = await uploadAvatar(user.id, cropResult.uri, cropResult.mimeType);
@@ -195,8 +183,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       await refreshProfile();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Failed to update profile photo.');
-      Alert.alert('Upload failed', 'Upload failed. Check Storage bucket + policies.');
+      const reason = uploadError instanceof Error ? uploadError.message : 'Failed to update profile photo.';
+      setError(reason);
+      Alert.alert('Upload failed', reason);
     }
   }, [isGuest, user, refreshProfile]);
 

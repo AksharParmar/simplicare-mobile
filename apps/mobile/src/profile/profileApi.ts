@@ -11,21 +11,16 @@ type ProfileRow = {
 const avatarUrlCache = new Map<string, { url: string; expiresAt: number }>();
 const AVATARS_BUCKET = 'avatars';
 
-type BucketCheckResult = {
-  ok: boolean;
-  message?: string;
-};
-
 type AvatarDebugContext = {
   userId: string | null;
   path?: string;
   assetUri?: string;
   assetMimeType?: string;
+  contentType?: string;
 };
 
-type StorageDebugResult = {
+type AvatarStorageProbeResult = {
   ok: boolean;
-  bucketNames: string[];
   message?: string;
 };
 
@@ -135,11 +130,17 @@ export async function uploadAvatar(
         projectHost,
         bucket: AVATARS_BUCKET,
         path: avatarPath,
+        contentType,
+        suppliedMimeType: mimeType,
         name: error.name,
+        status: 'status' in error ? (error as { status?: number }).status : undefined,
         statusCode: 'statusCode' in error ? (error as { statusCode?: string }).statusCode : undefined,
         message: error.message,
         raw: error,
       });
+    }
+    if (/bucket.*not found/i.test(error.message)) {
+      throw new Error("Supabase bucket 'avatars' not found. Create it in Dashboard -> Storage.");
     }
     throw new Error(error.message);
   }
@@ -184,52 +185,27 @@ export async function getAvatarUrl(avatarPath: string): Promise<string> {
   return cacheBusted;
 }
 
-export async function assertAvatarsBucketExists(): Promise<BucketCheckResult> {
-  if (!__DEV__) {
-    return { ok: true };
-  }
-
+export async function runAvatarStorageDebugProbe(userId: string): Promise<AvatarStorageProbeResult> {
   const client = getSupabaseClient();
-  const { data, error } = await client.storage.listBuckets();
-
+  const path = `${userId}/avatar.jpg`;
+  const { data, error } = await client.storage.from(AVATARS_BUCKET).createSignedUrl(path, 60);
   if (error) {
     return {
       ok: false,
       message:
-        "Cannot verify buckets (permissions). Ensure 'avatars' exists and policies allow access.",
+        "Storage policy blocked. Confirm Storage->avatars policies allow INSERT/UPDATE/SELECT for authenticated.",
     };
   }
 
-  const bucketNames = (data ?? []).map((bucket) => bucket.name);
-  console.log('[Profile] Supabase storage buckets:', bucketNames);
-
-  if (!bucketNames.includes(AVATARS_BUCKET)) {
+  if (!data?.signedUrl) {
     return {
       ok: false,
-      message: "Supabase bucket 'avatars' not found. Create it in Dashboard \u2192 Storage.",
+      message: 'Storage probe failed to generate a signed URL.',
     };
   }
 
-  return { ok: true };
-}
-
-export async function runAvatarStorageDebugCheck(): Promise<StorageDebugResult> {
-  const client = getSupabaseClient();
-  const { data, error } = await client.storage.listBuckets();
-  if (error) {
-    return {
-      ok: false,
-      bucketNames: [],
-      message: "Unable to list buckets (permissions). Verify bucket 'avatars' exists in Dashboard -> Storage.",
-    };
-  }
-
-  const bucketNames = (data ?? []).map((bucket) => bucket.name);
-  const hasAvatars = bucketNames.includes(AVATARS_BUCKET);
   return {
-    ok: hasAvatars,
-    bucketNames,
-    message: hasAvatars ? undefined : "Supabase bucket 'avatars' not found. Create it in Dashboard -> Storage.",
+    ok: true,
   };
 }
 
@@ -251,6 +227,7 @@ export function logAvatarStorageDebug(context: AvatarDebugContext): void {
     userId: context.userId ?? 'guest',
     bucket: AVATARS_BUCKET,
     path: context.path ?? '(not set)',
+    contentType: context.contentType ?? '(unknown)',
     assetMimeType: context.assetMimeType ?? '(unknown)',
     assetUri: context.assetUri ?? '(unknown)',
   });
