@@ -78,17 +78,6 @@ export function TodayScreen({ route, navigation }: Props) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!__DEV__) {
-      return;
-    }
-
-    console.log('[TodayScreen] avatar state', {
-      avatarPath: profile?.avatarPath ?? null,
-      avatarUrl: profile?.avatarUrl ?? null,
-    });
-  }, [profile?.avatarPath, profile?.avatarUrl]);
-
   const medicationById = useMemo(
     () => new Map(state.medications.map((medication) => [medication.id, medication])),
     [state.medications],
@@ -234,7 +223,6 @@ export function TodayScreen({ route, navigation }: Props) {
         <Pressable onPress={() => navigation.navigate('Settings')}>
           <AvatarImage
             size={44}
-            uri={profile?.avatarUrl ?? undefined}
             fallbackText={profileName || 'G'}
           />
         </Pressable>

@@ -5,7 +5,6 @@ import Constants from 'expo-constants';
 import { useMemo, useState } from 'react';
 import {
   Alert,
-  Linking,
   Pressable,
   ScrollView,
   Share,
@@ -22,11 +21,8 @@ import { RootStackParamList } from '../navigation/types';
 import {
   cancelMedicationNotificationsForScope,
   cancelAllMedicationNotifications,
-  getScheduledNotificationCount,
   rescheduleAllMedicationNotifications,
-  scheduleTestNotificationInOneMinute,
 } from '../notifications/notificationScheduler';
-import { logAvatarStorageDebug, runAvatarStorageDebugProbe } from '../profile/profileApi';
 import { useAppState } from '../state/AppStateContext';
 import { useAuth } from '../state/AuthContext';
 import { usePreferences } from '../state/PreferencesContext';
@@ -49,30 +45,17 @@ export function SettingsScreen() {
   const { prefs, updatePrefs } = usePreferences();
   const {
     profile,
-    setAvatarFromPicker,
-    removeAvatar,
-    refreshAvatarUrl,
     loading: profileLoading,
     error: profileError,
-    lastAvatarError,
   } =
     useProfile();
 
-  const [devMessage, setDevMessage] = useState<string | null>(null);
   const [isPasteModalVisible, setIsPasteModalVisible] = useState(false);
   const [devPastedText, setDevPastedText] = useState('');
 
   const appVersion = useMemo(() => Constants.expoConfig?.version ?? '1.0.0', []);
   const displayName = profile?.displayName?.trim() || (isGuest ? 'Guest' : 'Not set');
   const subtitle = isGuest ? 'Guest mode' : session?.user?.email ?? 'Signed in';
-
-  async function handleChangeAvatar() {
-    await setAvatarFromPicker();
-  }
-
-  async function handleRemoveAvatar() {
-    await removeAvatar();
-  }
 
   async function handleToggleReminders(next: boolean) {
     await updatePrefs({ remindersEnabled: next });
@@ -144,70 +127,6 @@ export function SettingsScreen() {
     Alert.alert('Tutorial reset', 'Quick start will appear next app launch.');
   }
 
-  async function handleTestNotification() {
-    await scheduleTestNotificationInOneMinute();
-    const scheduledCount = await getScheduledNotificationCount();
-    setDevMessage(`Test reminder scheduled. Total scheduled: ${scheduledCount}`);
-  }
-
-  async function handleStorageDebugCheck() {
-    const currentUserId = session?.user?.id ?? null;
-    const path = currentUserId ? `${currentUserId}/avatar.jpg` : undefined;
-    logAvatarStorageDebug({
-      userId: currentUserId,
-      path,
-      contentType: 'image/jpeg',
-    });
-
-    if (!currentUserId) {
-      setDevMessage('Storage Debug requires a signed-in user.');
-      return;
-    }
-
-    const result = await runAvatarStorageDebugProbe(currentUserId);
-    if (result.ok) {
-      setDevMessage(`Avatar storage probe OK for path ${path}`);
-      return;
-    }
-
-    setDevMessage(
-      result.message ??
-        "Storage policy blocked. Confirm Storage->avatars policies allow INSERT/UPDATE/SELECT for authenticated.",
-    );
-  }
-
-  async function handleOpenAvatarUrl() {
-    if (!profile?.avatarUrl) {
-      setDevMessage('No avatar URL available.');
-      return;
-    }
-
-    if (__DEV__) {
-      console.log('[Avatar] opening url=', JSON.stringify(profile.avatarUrl));
-    }
-    await Linking.openURL(profile.avatarUrl);
-  }
-
-  async function handleTestAvatarFetch() {
-    if (!profile?.avatarUrl) {
-      setDevMessage('No avatar URL to test.');
-      return;
-    }
-
-    try {
-      const res = await fetch(profile.avatarUrl, { method: 'GET' });
-      const contentType = res.headers.get('content-type');
-      const blob = await res.blob();
-      const result = `Avatar fetch: status=${res.status}, content-type=${contentType ?? '(none)'}, bytes=${blob.size}`;
-      console.log('[Settings] Avatar fetch test', result);
-      setDevMessage(result);
-    } catch (fetchError) {
-      const message =
-        fetchError instanceof Error ? fetchError.message : 'Avatar fetch failed.';
-      setDevMessage(`Avatar fetch failed: ${message}`);
-    }
-  }
-
   function handleUseDevText(text: string) {
     const value = text.trim();
     setDevPastedText(value);
@@ -233,7 +152,6 @@ export function SettingsScreen() {
         <View style={styles.profileRow}>
           <AvatarImage
             size={56}
-            uri={profile?.avatarUrl ?? undefined}
             fallbackText={displayName}
           />
           <View style={styles.profileMeta}>
@@ -242,44 +160,13 @@ export function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.profileActionsRow}>
-          <Pressable style={({ pressed }) => [styles.pillButton, pressed && styles.buttonPressed]} onPress={() => void handleChangeAvatar()}>
-            <Text style={styles.pillButtonText}>{profile?.avatarPath ? 'Edit photo' : 'Add photo'}</Text>
-          </Pressable>
-          {profile?.avatarPath ? (
-            <Pressable
-              style={({ pressed }) => [styles.pillButtonDanger, pressed && styles.buttonPressed]}
-              onPress={() => void handleRemoveAvatar()}
-            >
-              <Text style={styles.pillButtonDangerText}>Remove photo</Text>
-            </Pressable>
-          ) : null}
+        <View style={styles.rowStatic}>
+          <Text style={styles.rowLabel}>Profile photo</Text>
+          <Text style={styles.rowValue}>Coming soon</Text>
         </View>
 
         {profileLoading ? <Text style={styles.helperText}>Loading profile...</Text> : null}
         {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
-
-        {__DEV__ ? (
-          <View style={styles.devAvatarPanel}>
-            <Text style={styles.devAvatarTitle}>Avatar Debug (DEV)</Text>
-            <Text style={styles.devAvatarLine}>avatarPath: {profile?.avatarPath ?? '(null)'}</Text>
-            <Text style={styles.devAvatarLine}>avatarUrl: {profile?.avatarUrl ?? '(null)'}</Text>
-            <Text style={styles.devAvatarLine}>
-              lastAvatarError: {lastAvatarError ?? '(none)'}
-            </Text>
-            <View style={styles.devAvatarActions}>
-              <Pressable style={styles.devAvatarButton} onPress={() => void handleOpenAvatarUrl()}>
-                <Text style={styles.devAvatarButtonText}>Open avatar URL</Text>
-              </Pressable>
-              <Pressable style={styles.devAvatarButton} onPress={() => void refreshAvatarUrl()}>
-                <Text style={styles.devAvatarButtonText}>Refresh avatar URL</Text>
-              </Pressable>
-              <Pressable style={styles.devAvatarButton} onPress={() => void handleTestAvatarFetch()}>
-                <Text style={styles.devAvatarButtonText}>Test avatar fetch</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
       </View>
 
       <View style={styles.sectionCard}>
@@ -403,19 +290,10 @@ export function SettingsScreen() {
             <Text style={styles.rowLabel}>Paste OCR text (Dev)</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
-          <Pressable style={styles.row} onPress={() => void handleTestNotification()}>
-            <Text style={styles.rowLabel}>Test notification in 1 minute</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-          <Pressable style={styles.row} onPress={() => void handleStorageDebugCheck()}>
-            <Text style={styles.rowLabel}>Avatar Storage Debug</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
           <Text style={styles.devHelper}>Developer tools</Text>
           {devPastedText ? (
             <Text style={styles.devMessage}>Loaded OCR text ({devPastedText.length} chars)</Text>
           ) : null}
-          {devMessage ? <Text style={styles.devMessage}>{devMessage}</Text> : null}
         </View>
       ) : null}
 
@@ -474,11 +352,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: spacing.xs,
   },
-  profileActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   row: {
     minHeight: 48,
     flexDirection: 'row',
@@ -510,36 +383,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#94a3b8',
     marginTop: -1,
-  },
-  pillButton: {
-    minHeight: 40,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillButtonText: {
-    color: '#334155',
-    fontSize: typography.caption,
-    fontWeight: '700',
-  },
-  pillButtonDanger: {
-    minHeight: 40,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillButtonDangerText: {
-    color: '#b91c1c',
-    fontSize: typography.caption,
-    fontWeight: '700',
   },
   errorText: {
     fontSize: typography.caption,
@@ -592,44 +435,8 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: '#64748b',
   },
-  devAvatarPanel: {
-    borderTopWidth: 1,
-    borderTopColor: '#eef2f7',
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
-  },
-  devAvatarTitle: {
-    fontSize: typography.caption,
-    color: '#334155',
-    fontWeight: '700',
-  },
-  devAvatarLine: {
-    fontSize: typography.caption,
-    color: '#64748b',
-  },
-  devAvatarActions: {
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  devAvatarButton: {
-    minHeight: 38,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  devAvatarButtonText: {
-    fontSize: typography.caption,
-    color: '#334155',
-    fontWeight: '600',
-  },
   devMessage: {
     fontSize: typography.caption,
     color: '#334155',
-  },
-  buttonPressed: {
-    opacity: 0.85,
   },
 });

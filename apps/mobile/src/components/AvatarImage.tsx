@@ -1,6 +1,6 @@
 import { Image as ExpoImage } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { typography } from '../theme/tokens';
 
@@ -18,10 +18,6 @@ export function AvatarImage({ size, uri, fallbackText = 'G' }: Props) {
     setHasError(false);
     setIsLoading(Boolean(uri));
   }, [uri]);
-
-  if (__DEV__) {
-    console.log('[AvatarImage] render', { uri });
-  }
 
   return (
     <View
@@ -46,19 +42,12 @@ export function AvatarImage({ size, uri, fallbackText = 'G' }: Props) {
           onError={(event) => {
             setIsLoading(false);
             setHasError(true);
-            if (__DEV__) {
-              console.log('[AvatarImage] onError=', JSON.stringify(event));
-            }
           }}
         />
       ) : (
         <Text style={styles.fallback}>{fallbackText.slice(0, 1).toUpperCase()}</Text>
       )}
-      {isLoading ? (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color="#64748b" />
-        </View>
-      ) : null}
+      {isLoading ? <View style={styles.loadingOverlay} /> : null}
     </View>
   );
 }
