@@ -27,6 +27,7 @@ type ProfileContextValue = {
   loading: boolean;
   error: string | null;
   refreshProfile: () => Promise<void>;
+  refreshAvatarUrl: () => Promise<void>;
   setDisplayName: (name: string) => Promise<void>;
   setAvatarFromPicker: () => Promise<void>;
   removeAvatar: () => Promise<void>;
@@ -99,6 +100,36 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshProfile();
   }, [refreshProfile]);
+
+  const refreshAvatarUrl = useCallback(async () => {
+    setProfile((prev) => {
+      if (!prev?.avatarPath) {
+        return prev ?? null;
+      }
+
+      return { ...prev, avatarUrl: null };
+    });
+
+    if (!profile?.avatarPath) {
+      return;
+    }
+
+    try {
+      const nextUrl = await getAvatarUrl(profile.avatarPath, { forceRefresh: true });
+      setProfile((prev) => {
+        if (!prev || prev.avatarPath !== profile.avatarPath) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          avatarUrl: nextUrl,
+        };
+      });
+    } catch {
+      // Keep existing avatar state if refresh fails.
+    }
+  }, [profile?.avatarPath]);
 
   const setDisplayName = useCallback(
     async (name: string) => {
@@ -217,12 +248,22 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       refreshProfile,
+      refreshAvatarUrl,
       setDisplayName,
       setAvatarFromPicker,
       removeAvatar,
       clearError: () => setError(null),
     }),
-    [profile, loading, error, refreshProfile, setDisplayName, setAvatarFromPicker, removeAvatar],
+    [
+      profile,
+      loading,
+      error,
+      refreshProfile,
+      refreshAvatarUrl,
+      setDisplayName,
+      setAvatarFromPicker,
+      removeAvatar,
+    ],
   );
 
   return (

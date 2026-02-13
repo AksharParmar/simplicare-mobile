@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   ActivityIndicator,
-  Image,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdherenceRing } from '../components/AdherenceRing';
+import { AvatarImage } from '../components/AvatarImage';
 import { DoseActionSheet } from '../components/DoseActionSheet';
 import { RootTabParamList } from '../navigation/types';
 import { scheduleSnoozeNotification } from '../notifications/notificationScheduler';
@@ -61,7 +61,7 @@ export function TodayScreen({ route, navigation }: Props) {
   const { isGuest } = useAuth();
   const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh, currentScope } = useAppState();
-  const { profile } = useProfile();
+  const { profile, refreshAvatarUrl } = useProfile();
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -77,6 +77,17 @@ export function TodayScreen({ route, navigation }: Props) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
+    console.log('[TodayScreen] avatar state', {
+      avatarPath: profile?.avatarPath ?? null,
+      avatarUrl: profile?.avatarUrl ?? null,
+    });
+  }, [profile?.avatarPath, profile?.avatarUrl]);
 
   const medicationById = useMemo(
     () => new Map(state.medications.map((medication) => [medication.id, medication])),
@@ -220,15 +231,15 @@ export function TodayScreen({ route, navigation }: Props) {
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>Today</Text>
         </View>
-        <Pressable style={styles.avatarButton} onPress={() => navigation.navigate('Settings')}>
-          {profile?.avatarUrl ? (
-            <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarInitial}>
-              {(profileName || 'G').slice(0, 1).toUpperCase()}
-            </Text>
-          )}
-        </Pressable>
+        <AvatarImage
+          size={44}
+          uri={profile?.avatarUrl ?? null}
+          fallbackText={profileName || 'G'}
+          onPress={() => navigation.navigate('Settings')}
+          onRetry={() => {
+            void refreshAvatarUrl();
+          }}
+        />
       </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
@@ -419,26 +430,6 @@ const styles = StyleSheet.create({
   },
   headerTextWrap: {
     flex: 1,
-  },
-  avatarButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarInitial: {
-    fontSize: typography.body,
-    color: '#334155',
-    fontWeight: '700',
   },
   banner: {
     borderWidth: 1,

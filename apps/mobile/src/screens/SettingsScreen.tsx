@@ -5,7 +5,6 @@ import Constants from 'expo-constants';
 import { useMemo, useState } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   ScrollView,
   Share,
@@ -17,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PasteOcrTextModal } from '../components/PasteOcrTextModal';
+import { AvatarImage } from '../components/AvatarImage';
 import { RootStackParamList } from '../navigation/types';
 import {
   cancelMedicationNotificationsForScope,
@@ -46,7 +46,14 @@ export function SettingsScreen() {
     useAppState();
   const { isGuest, session } = useAuth();
   const { prefs, updatePrefs } = usePreferences();
-  const { profile, setAvatarFromPicker, removeAvatar, loading: profileLoading, error: profileError } =
+  const {
+    profile,
+    setAvatarFromPicker,
+    removeAvatar,
+    refreshAvatarUrl,
+    loading: profileLoading,
+    error: profileError,
+  } =
     useProfile();
 
   const [devMessage, setDevMessage] = useState<string | null>(null);
@@ -190,13 +197,14 @@ export function SettingsScreen() {
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Profile</Text>
         <View style={styles.profileRow}>
-          <View style={styles.avatarPreviewWrap}>
-            {profile?.avatarUrl ? (
-              <Image source={{ uri: profile.avatarUrl }} style={styles.avatarPreviewImage} />
-            ) : (
-              <Text style={styles.avatarPreviewInitial}>{displayName.slice(0, 1).toUpperCase()}</Text>
-            )}
-          </View>
+          <AvatarImage
+            size={56}
+            uri={profile?.avatarUrl ?? null}
+            fallbackText={displayName}
+            onRetry={() => {
+              void refreshAvatarUrl();
+            }}
+          />
           <View style={styles.profileMeta}>
             <Text style={styles.profileName}>{displayName}</Text>
             <Text style={styles.profileSubtitle}>{subtitle}</Text>
@@ -399,26 +407,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  avatarPreviewWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: '#dbe2ea',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarPreviewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPreviewInitial: {
-    fontSize: typography.body,
-    color: '#334155',
-    fontWeight: '700',
   },
   profileMeta: {
     flex: 1,

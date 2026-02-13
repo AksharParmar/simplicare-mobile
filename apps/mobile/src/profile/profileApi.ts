@@ -178,7 +178,14 @@ export async function removeAvatarFile(avatarPath: string): Promise<void> {
   avatarUrlCache.delete(avatarPath);
 }
 
-export async function getAvatarUrl(avatarPath: string): Promise<string> {
+export async function getAvatarUrl(
+  avatarPath: string,
+  options?: { forceRefresh?: boolean },
+): Promise<string> {
+  if (options?.forceRefresh) {
+    avatarUrlCache.delete(avatarPath);
+  }
+
   const cached = avatarUrlCache.get(avatarPath);
   const now = Date.now();
   if (cached && cached.expiresAt > now) {
@@ -188,11 +195,12 @@ export async function getAvatarUrl(avatarPath: string): Promise<string> {
   const client = getSupabaseClient();
   const signed = await client.storage.from(AVATARS_BUCKET).createSignedUrl(avatarPath, 3600);
   if (!signed.error && signed.data?.signedUrl) {
+    const signedWithVersion = `${signed.data.signedUrl}${signed.data.signedUrl.includes('?') ? '&' : '?'}v=${now}`;
     avatarUrlCache.set(avatarPath, {
-      url: signed.data.signedUrl,
+      url: signedWithVersion,
       expiresAt: now + 5 * 60 * 1000,
     });
-    return signed.data.signedUrl;
+    return signedWithVersion;
   }
 
   const publicUrl = client.storage.from(AVATARS_BUCKET).getPublicUrl(avatarPath).data.publicUrl;
