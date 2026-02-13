@@ -1,11 +1,11 @@
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { typography } from '../theme/tokens';
 
 type Props = {
   size: number;
-  uri: string | null;
+  uri?: string | null;
   fallbackText?: string;
   onPress?: () => void;
   onRetry?: () => void;
@@ -13,7 +13,26 @@ type Props = {
 
 export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }: Props) {
   const hasRetriedRef = useRef(false);
+  const [cacheBust, setCacheBust] = useState(() => Date.now());
   const Wrapper = onPress ? Pressable : View;
+  const finalUri = useMemo(() => {
+    if (!uri) {
+      return undefined;
+    }
+    const sep = uri.includes('?') ? '&' : '?';
+    return `${uri}${sep}v=${cacheBust}`;
+  }, [uri, cacheBust]);
+
+  useEffect(() => {
+    if (uri) {
+      hasRetriedRef.current = false;
+      setCacheBust(Date.now());
+    }
+  }, [uri]);
+
+  if (__DEV__) {
+    console.log('[AvatarImage] render', { uri, finalUri });
+  }
 
   function handleError(error: unknown) {
     if (__DEV__) {
@@ -25,6 +44,7 @@ export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }:
     }
 
     hasRetriedRef.current = true;
+    setCacheBust(Date.now());
     onRetry();
   }
 
@@ -40,9 +60,10 @@ export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }:
       ]}
       onPress={onPress}
     >
-      {uri ? (
+      {finalUri ? (
         <Image
-          source={{ uri: uri ?? undefined }}
+          key={finalUri ?? 'no-avatar'}
+          source={{ uri: finalUri }}
           style={styles.image}
           onError={(event) => handleError(event.nativeEvent)}
         />

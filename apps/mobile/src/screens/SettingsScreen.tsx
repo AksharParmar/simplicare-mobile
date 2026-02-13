@@ -233,7 +233,7 @@ export function SettingsScreen() {
         <View style={styles.profileRow}>
           <AvatarImage
             size={56}
-            uri={profile?.avatarUrl ?? null}
+            uri={profile?.avatarUrl ?? undefined}
             fallbackText={displayName}
             onRetry={() => {
               void refreshAvatarUrl();

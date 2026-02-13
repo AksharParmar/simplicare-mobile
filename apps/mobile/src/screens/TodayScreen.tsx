@@ -233,7 +233,7 @@ export function TodayScreen({ route, navigation }: Props) {
         </View>
         <AvatarImage
           size={44}
-          uri={profile?.avatarUrl ?? null}
+          uri={profile?.avatarUrl ?? undefined}
           fallbackText={profileName || 'G'}
           onPress={() => navigation.navigate('Settings')}
           onRetry={() => {
