@@ -15,7 +15,11 @@ export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }:
   const hasRetriedRef = useRef(false);
   const Wrapper = onPress ? Pressable : View;
 
-  function handleError() {
+  function handleError(error: unknown) {
+    if (__DEV__) {
+      console.log('[AvatarImage] onError=', JSON.stringify(error));
+    }
+
     if (!onRetry || hasRetriedRef.current) {
       return;
     }
@@ -40,7 +44,7 @@ export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }:
         <Image
           source={{ uri: uri ?? undefined }}
           style={styles.image}
-          onError={handleError}
+          onError={(event) => handleError(event.nativeEvent)}
         />
       ) : (
         <Text style={styles.fallback}>{fallbackText.slice(0, 1).toUpperCase()}</Text>

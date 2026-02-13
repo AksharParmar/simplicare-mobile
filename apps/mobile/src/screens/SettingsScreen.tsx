@@ -182,6 +182,9 @@ export function SettingsScreen() {
       return;
     }
 
+    if (__DEV__) {
+      console.log('[Avatar] opening url=', JSON.stringify(profile.avatarUrl));
+    }
     await Linking.openURL(profile.avatarUrl);
   }
 

@@ -108,7 +108,7 @@ export async function uploadAvatar(
   const response = await fetch(fileUri);
   const blob = await response.blob();
   const contentType = 'image/jpeg';
-  const avatarPath = `${uid}/avatar.jpg`;
+  const avatarPath = `${uid}/avatar.jpg`.trim();
 
   let { error } = await client.storage.from(AVATARS_BUCKET).upload(avatarPath, blob, {
     contentType,
@@ -174,42 +174,52 @@ export async function uploadAvatar(
 
 export async function removeAvatarFile(avatarPath: string): Promise<void> {
   const client = getSupabaseClient();
-  await client.storage.from(AVATARS_BUCKET).remove([avatarPath]);
-  avatarUrlCache.delete(avatarPath);
+  const cleanPath = avatarPath.trim();
+  await client.storage.from(AVATARS_BUCKET).remove([cleanPath]);
+  avatarUrlCache.delete(cleanPath);
 }
 
 export async function getAvatarUrl(
   avatarPath: string,
   options?: { forceRefresh?: boolean },
 ): Promise<string> {
+  const cleanPath = avatarPath.trim();
+
   if (options?.forceRefresh) {
-    avatarUrlCache.delete(avatarPath);
+    avatarUrlCache.delete(cleanPath);
   }
 
-  const cached = avatarUrlCache.get(avatarPath);
+  const cached = avatarUrlCache.get(cleanPath);
   const now = Date.now();
   if (cached && cached.expiresAt > now) {
     return cached.url;
   }
 
   const client = getSupabaseClient();
-  const signed = await client.storage.from(AVATARS_BUCKET).createSignedUrl(avatarPath, 3600);
+  if (__DEV__) {
+    console.log('[Avatar] createSignedUrl path=', JSON.stringify(cleanPath));
+  }
+
+  const signed = await client.storage.from(AVATARS_BUCKET).createSignedUrl(cleanPath, 3600);
   if (!signed.error && signed.data?.signedUrl) {
     const signedWithVersion = `${signed.data.signedUrl}${signed.data.signedUrl.includes('?') ? '&' : '?'}v=${now}`;
-    avatarUrlCache.set(avatarPath, {
+    if (__DEV__) {
+      console.log('[Avatar] signedUrl=', JSON.stringify(signed.data.signedUrl));
+    }
+    avatarUrlCache.set(cleanPath, {
       url: signedWithVersion,
       expiresAt: now + 5 * 60 * 1000,
     });
     return signedWithVersion;
   }
 
-  const publicUrl = client.storage.from(AVATARS_BUCKET).getPublicUrl(avatarPath).data.publicUrl;
+  const publicUrl = client.storage.from(AVATARS_BUCKET).getPublicUrl(cleanPath).data.publicUrl;
   if (!publicUrl) {
     throw new Error(signed.error?.message ?? 'Could not create avatar URL');
   }
 
   const cacheBusted = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${now}`;
-  avatarUrlCache.set(avatarPath, {
+  avatarUrlCache.set(cleanPath, {
     url: cacheBusted,
     expiresAt: now + 60 * 1000,
   });
@@ -218,20 +228,54 @@ export async function getAvatarUrl(
 
 export async function runAvatarStorageDebugProbe(userId: string): Promise<AvatarStorageProbeResult> {
   const client = getSupabaseClient();
-  const path = `${userId}/avatar.jpg`;
+  const path = `${userId}/avatar.jpg`.trim();
   const { data, error } = await client.storage.from(AVATARS_BUCKET).createSignedUrl(path, 60);
   if (error) {
     return {
       ok: false,
-      message:
-        "Storage policy blocked. Confirm Storage->avatars policies allow INSERT/UPDATE/SELECT for authenticated.",
+      message: `createSignedUrl failed: ${error.message}`,
     };
   }
 
-  if (!data?.signedUrl) {
+  const signedUrl = data?.signedUrl;
+  if (!signedUrl) {
     return {
       ok: false,
       message: 'Storage probe failed to generate a signed URL.',
+    };
+  }
+
+  try {
+    const res = await fetch(signedUrl);
+    const bodyText = await res.text();
+    const contentType = res.headers.get('content-type') ?? '(none)';
+    if (!res.ok || /\"error\"/i.test(bodyText)) {
+      const download = await client.storage.from(AVATARS_BUCKET).download(path);
+      if (download.error) {
+        return {
+          ok: false,
+          message: `Signed URL fetch failed (status=${res.status}, content-type=${contentType}, body=${bodyText.slice(0, 200)}). download() also failed: ${download.error.message}`,
+        };
+      }
+
+      return {
+        ok: false,
+        message: `Signed URL fetch failed (status=${res.status}, content-type=${contentType}, body=${bodyText.slice(0, 200)}). download() succeeded; path is readable via SDK.`,
+      };
+    }
+  } catch (fetchError) {
+    const download = await client.storage.from(AVATARS_BUCKET).download(path);
+    const fetchMessage = fetchError instanceof Error ? fetchError.message : 'Unknown fetch error';
+    if (download.error) {
+      return {
+        ok: false,
+        message: `Signed URL fetch error: ${fetchMessage}. download() failed: ${download.error.message}`,
+      };
+    }
+
+    return {
+      ok: false,
+      message: `Signed URL fetch error: ${fetchMessage}. download() succeeded.`,
     };
   }
 
