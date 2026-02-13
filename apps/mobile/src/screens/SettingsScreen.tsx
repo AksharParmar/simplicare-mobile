@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   Share,
@@ -53,6 +54,7 @@ export function SettingsScreen() {
     refreshAvatarUrl,
     loading: profileLoading,
     error: profileError,
+    lastAvatarError,
   } =
     useProfile();
 
@@ -174,6 +176,35 @@ export function SettingsScreen() {
     );
   }
 
+  async function handleOpenAvatarUrl() {
+    if (!profile?.avatarUrl) {
+      setDevMessage('No avatar URL available.');
+      return;
+    }
+
+    await Linking.openURL(profile.avatarUrl);
+  }
+
+  async function handleTestAvatarFetch() {
+    if (!profile?.avatarUrl) {
+      setDevMessage('No avatar URL to test.');
+      return;
+    }
+
+    try {
+      const res = await fetch(profile.avatarUrl, { method: 'GET' });
+      const contentType = res.headers.get('content-type');
+      const blob = await res.blob();
+      const result = `Avatar fetch: status=${res.status}, content-type=${contentType ?? '(none)'}, bytes=${blob.size}`;
+      console.log('[Settings] Avatar fetch test', result);
+      setDevMessage(result);
+    } catch (fetchError) {
+      const message =
+        fetchError instanceof Error ? fetchError.message : 'Avatar fetch failed.';
+      setDevMessage(`Avatar fetch failed: ${message}`);
+    }
+  }
+
   function handleUseDevText(text: string) {
     const value = text.trim();
     setDevPastedText(value);
@@ -227,6 +258,28 @@ export function SettingsScreen() {
 
         {profileLoading ? <Text style={styles.helperText}>Loading profile...</Text> : null}
         {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+
+        {__DEV__ ? (
+          <View style={styles.devAvatarPanel}>
+            <Text style={styles.devAvatarTitle}>Avatar Debug (DEV)</Text>
+            <Text style={styles.devAvatarLine}>avatarPath: {profile?.avatarPath ?? '(null)'}</Text>
+            <Text style={styles.devAvatarLine}>avatarUrl: {profile?.avatarUrl ?? '(null)'}</Text>
+            <Text style={styles.devAvatarLine}>
+              lastAvatarError: {lastAvatarError ?? '(none)'}
+            </Text>
+            <View style={styles.devAvatarActions}>
+              <Pressable style={styles.devAvatarButton} onPress={() => void handleOpenAvatarUrl()}>
+                <Text style={styles.devAvatarButtonText}>Open avatar URL</Text>
+              </Pressable>
+              <Pressable style={styles.devAvatarButton} onPress={() => void refreshAvatarUrl()}>
+                <Text style={styles.devAvatarButtonText}>Refresh avatar URL</Text>
+              </Pressable>
+              <Pressable style={styles.devAvatarButton} onPress={() => void handleTestAvatarFetch()}>
+                <Text style={styles.devAvatarButtonText}>Test avatar fetch</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.sectionCard}>
@@ -538,6 +591,39 @@ const styles = StyleSheet.create({
   devHelper: {
     fontSize: typography.caption,
     color: '#64748b',
+  },
+  devAvatarPanel: {
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f7',
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  devAvatarTitle: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '700',
+  },
+  devAvatarLine: {
+    fontSize: typography.caption,
+    color: '#64748b',
+  },
+  devAvatarActions: {
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  devAvatarButton: {
+    minHeight: 38,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#dbe2ea',
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  devAvatarButtonText: {
+    fontSize: typography.caption,
+    color: '#334155',
+    fontWeight: '600',
   },
   devMessage: {
     fontSize: typography.caption,

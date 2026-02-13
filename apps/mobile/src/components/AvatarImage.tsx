@@ -38,7 +38,7 @@ export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }:
     >
       {uri ? (
         <Image
-          source={{ uri }}
+          source={{ uri: uri ?? undefined }}
           style={styles.image}
           onError={handleError}
         />

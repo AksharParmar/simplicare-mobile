@@ -26,6 +26,7 @@ type ProfileContextValue = {
   profile: ProfileView | null;
   loading: boolean;
   error: string | null;
+  lastAvatarError: string | null;
   refreshProfile: () => Promise<void>;
   refreshAvatarUrl: () => Promise<void>;
   setDisplayName: (name: string) => Promise<void>;
@@ -47,6 +48,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastAvatarError, setLastAvatarError] = useState<string | null>(null);
 
   const [cropVisible, setCropVisible] = useState(false);
   const [cropImageUri, setCropImageUri] = useState<string | null>(null);
@@ -55,6 +57,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setLastAvatarError(null);
 
     try {
       if (isGuest) {
@@ -84,7 +87,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       }
 
       const remoteProfile = await getOrCreateProfile(user.id);
-      const avatarUrl = remoteProfile.avatarPath ? await getAvatarUrl(remoteProfile.avatarPath) : null;
+      let avatarUrl: string | null = null;
+      if (remoteProfile.avatarPath) {
+        try {
+          avatarUrl = await getAvatarUrl(remoteProfile.avatarPath);
+        } catch (avatarError) {
+          const avatarMessage =
+            avatarError instanceof Error
+              ? `Failed to create avatar URL: ${avatarError.message}`
+              : 'Failed to create avatar URL.';
+          setLastAvatarError(avatarMessage);
+        }
+      }
 
       setProfile({
         ...remoteProfile,
@@ -111,11 +125,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     });
 
     if (!profile?.avatarPath) {
+      setLastAvatarError(null);
       return;
     }
 
     try {
       const nextUrl = await getAvatarUrl(profile.avatarPath, { forceRefresh: true });
+      setLastAvatarError(null);
       setProfile((prev) => {
         if (!prev || prev.avatarPath !== profile.avatarPath) {
           return prev;
@@ -126,8 +142,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           avatarUrl: nextUrl,
         };
       });
-    } catch {
-      // Keep existing avatar state if refresh fails.
+    } catch (avatarError) {
+      const message =
+        avatarError instanceof Error
+          ? `Failed to refresh avatar URL: ${avatarError.message}`
+          : 'Failed to refresh avatar URL.';
+      setLastAvatarError(message);
     }
   }, [profile?.avatarPath]);
 
@@ -216,6 +236,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     } catch (uploadError) {
       const reason = uploadError instanceof Error ? uploadError.message : 'Failed to update profile photo.';
       setError(reason);
+      setLastAvatarError(reason);
       Alert.alert('Upload failed', reason);
     }
   }, [isGuest, user, refreshProfile]);
@@ -235,6 +256,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     try {
       await removeAvatarFile(profile.avatarPath);
       await updateProfile(user.id, { avatarPath: null });
+      setLastAvatarError(null);
       await refreshProfile();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (removeError) {
@@ -247,17 +269,22 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       profile,
       loading,
       error,
+      lastAvatarError,
       refreshProfile,
       refreshAvatarUrl,
       setDisplayName,
       setAvatarFromPicker,
       removeAvatar,
-      clearError: () => setError(null),
+      clearError: () => {
+        setError(null);
+        setLastAvatarError(null);
+      },
     }),
     [
       profile,
       loading,
       error,
+      lastAvatarError,
       refreshProfile,
       refreshAvatarUrl,
       setDisplayName,
