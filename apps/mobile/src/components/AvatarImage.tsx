@@ -5,47 +5,66 @@ import { typography } from '../theme/tokens';
 
 type Props = {
   size: number;
-  uri?: string | null;
+  uri?: string;
   fallbackText?: string;
   onPress?: () => void;
   onRetry?: () => void;
+  forceRefreshToken?: number;
 };
 
-export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }: Props) {
+export function AvatarImage({
+  size,
+  uri,
+  fallbackText = 'G',
+  onPress,
+  onRetry,
+  forceRefreshToken,
+}: Props) {
   const hasRetriedRef = useRef(false);
-  const [cacheBust, setCacheBust] = useState(() => Date.now());
+  const [retryToken, setRetryToken] = useState<number | null>(null);
+  const [showFallback, setShowFallback] = useState(false);
   const Wrapper = onPress ? Pressable : View;
   const finalUri = useMemo(() => {
     if (!uri) {
       return undefined;
     }
-    const sep = uri.includes('?') ? '&' : '?';
-    return `${uri}${sep}v=${cacheBust}`;
-  }, [uri, cacheBust]);
 
-  useEffect(() => {
-    if (uri) {
-      hasRetriedRef.current = false;
-      setCacheBust(Date.now());
+    if (retryToken) {
+      const sep = uri.includes('?') ? '&' : '?';
+      return `${uri}${sep}retry=${retryToken}`;
     }
-  }, [uri]);
+
+    if (forceRefreshToken) {
+      const sep = uri.includes('?') ? '&' : '?';
+      return `${uri}${sep}v=${forceRefreshToken}`;
+    }
+
+    return uri;
+  }, [uri, retryToken, forceRefreshToken]);
 
   if (__DEV__) {
     console.log('[AvatarImage] render', { uri, finalUri });
   }
+
+  useEffect(() => {
+    hasRetriedRef.current = false;
+    setRetryToken(null);
+    setShowFallback(false);
+  }, [uri, forceRefreshToken]);
 
   function handleError(error: unknown) {
     if (__DEV__) {
       console.log('[AvatarImage] onError=', JSON.stringify(error));
     }
 
-    if (!onRetry || hasRetriedRef.current) {
+    if (hasRetriedRef.current) {
+      setShowFallback(true);
       return;
     }
 
     hasRetriedRef.current = true;
-    setCacheBust(Date.now());
-    onRetry();
+    setRetryToken(Date.now());
+    onRetry?.();
   }
 
   return (
@@ -60,9 +79,9 @@ export function AvatarImage({ size, uri, fallbackText = 'G', onPress, onRetry }:
       ]}
       onPress={onPress}
     >
-      {finalUri ? (
+      {!showFallback && finalUri ? (
         <Image
-          key={finalUri ?? 'no-avatar'}
+          key={uri ?? 'placeholder'}
           source={{ uri: finalUri }}
           style={styles.image}
           onError={(event) => handleError(event.nativeEvent)}

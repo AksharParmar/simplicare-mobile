@@ -234,6 +234,7 @@ export function TodayScreen({ route, navigation }: Props) {
         <AvatarImage
           size={44}
           uri={profile?.avatarUrl ?? undefined}
+          forceRefreshToken={profile?.avatarVersion}
           fallbackText={profileName || 'G'}
           onPress={() => navigation.navigate('Settings')}
           onRetry={() => {

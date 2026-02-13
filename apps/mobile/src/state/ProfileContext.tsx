@@ -20,6 +20,7 @@ const GUEST_PROFILE_KEY = 'simplicare_guest_profile_v1';
 
 type ProfileView = Profile & {
   avatarUrl: string | null;
+  avatarVersion: number;
 };
 
 type ProfileContextValue = {
@@ -77,6 +78,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           displayName: guestName,
           avatarPath: null,
           avatarUrl: null,
+          avatarVersion: 0,
         });
         return;
       }
@@ -100,10 +102,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setProfile({
+      setProfile((prev) => ({
         ...remoteProfile,
         avatarUrl,
-      });
+        avatarVersion: prev?.avatarVersion ?? 0,
+      }));
     } catch (profileError) {
       setError(profileError instanceof Error ? profileError.message : 'Failed to load profile');
     } finally {
@@ -164,6 +167,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           displayName,
           avatarPath: null,
           avatarUrl: null,
+          avatarVersion: prev?.avatarVersion ?? 0,
           ...prev,
         }));
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -232,6 +236,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       const avatarPath = await uploadAvatar(cropResult.uri, cropResult.mimeType);
       await updateProfile(user.id, { avatarPath });
       await refreshProfile();
+      setProfile((prev) => (prev ? { ...prev, avatarVersion: Date.now() } : prev));
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (uploadError) {
       const reason = uploadError instanceof Error ? uploadError.message : 'Failed to update profile photo.';
@@ -258,6 +263,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       await updateProfile(user.id, { avatarPath: null });
       setLastAvatarError(null);
       await refreshProfile();
+      setProfile((prev) => (prev ? { ...prev, avatarVersion: Date.now() } : prev));
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : 'Failed to remove profile photo.');

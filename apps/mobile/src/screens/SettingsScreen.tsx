@@ -234,6 +234,7 @@ export function SettingsScreen() {
           <AvatarImage
             size={56}
             uri={profile?.avatarUrl ?? undefined}
+            forceRefreshToken={profile?.avatarVersion}
             fallbackText={displayName}
             onRetry={() => {
               void refreshAvatarUrl();
