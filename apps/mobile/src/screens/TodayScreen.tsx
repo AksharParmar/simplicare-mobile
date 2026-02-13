@@ -61,7 +61,7 @@ export function TodayScreen({ route, navigation }: Props) {
   const { isGuest } = useAuth();
   const { prefs } = usePreferences();
   const { state, isLoading, addDoseLog, refresh, currentScope } = useAppState();
-  const { profile, refreshAvatarUrl } = useProfile();
+  const { profile } = useProfile();
   const [selectedDose, setSelectedDose] = useState<ActiveDose | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -231,16 +231,13 @@ export function TodayScreen({ route, navigation }: Props) {
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>Today</Text>
         </View>
-        <AvatarImage
-          size={44}
-          uri={profile?.avatarUrl ?? undefined}
-          forceRefreshToken={profile?.avatarVersion}
-          fallbackText={profileName || 'G'}
-          onPress={() => navigation.navigate('Settings')}
-          onRetry={() => {
-            void refreshAvatarUrl();
-          }}
-        />
+        <Pressable onPress={() => navigation.navigate('Settings')}>
+          <AvatarImage
+            size={44}
+            uri={profile?.avatarUrl ?? undefined}
+            fallbackText={profileName || 'G'}
+          />
+        </Pressable>
       </View>
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { typography } from '../theme/tokens';
 
@@ -7,68 +8,23 @@ type Props = {
   size: number;
   uri?: string;
   fallbackText?: string;
-  onPress?: () => void;
-  onRetry?: () => void;
-  forceRefreshToken?: number;
 };
 
-export function AvatarImage({
-  size,
-  uri,
-  fallbackText = 'G',
-  onPress,
-  onRetry,
-  forceRefreshToken,
-}: Props) {
-  const hasRetriedRef = useRef(false);
-  const [retryToken, setRetryToken] = useState<number | null>(null);
-  const [showFallback, setShowFallback] = useState(false);
-  const Wrapper = onPress ? Pressable : View;
-  const finalUri = useMemo(() => {
-    if (!uri) {
-      return undefined;
-    }
-
-    if (retryToken) {
-      const sep = uri.includes('?') ? '&' : '?';
-      return `${uri}${sep}retry=${retryToken}`;
-    }
-
-    if (forceRefreshToken) {
-      const sep = uri.includes('?') ? '&' : '?';
-      return `${uri}${sep}v=${forceRefreshToken}`;
-    }
-
-    return uri;
-  }, [uri, retryToken, forceRefreshToken]);
-
-  if (__DEV__) {
-    console.log('[AvatarImage] render', { uri, finalUri });
-  }
+export function AvatarImage({ size, uri, fallbackText = 'G' }: Props) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    hasRetriedRef.current = false;
-    setRetryToken(null);
-    setShowFallback(false);
-  }, [uri, forceRefreshToken]);
+    setHasError(false);
+    setIsLoading(Boolean(uri));
+  }, [uri]);
 
-  function handleError(error: unknown) {
-    if (__DEV__) {
-      console.log('[AvatarImage] onError=', JSON.stringify(error));
-    }
-
-    if (hasRetriedRef.current) {
-      setShowFallback(true);
-      return;
-    }
-
-    hasRetriedRef.current = true;
-    setRetryToken(Date.now());
-    onRetry?.();
+  if (__DEV__) {
+    console.log('[AvatarImage] render', { uri });
   }
 
   return (
-    <Wrapper
+    <View
       style={[
         styles.container,
         {
@@ -77,19 +33,33 @@ export function AvatarImage({
           borderRadius: size / 2,
         },
       ]}
-      onPress={onPress}
     >
-      {!showFallback && finalUri ? (
-        <Image
-          key={uri ?? 'placeholder'}
-          source={{ uri: finalUri }}
+      {uri && !hasError ? (
+        <ExpoImage
+          source={{ uri }}
           style={styles.image}
-          onError={(event) => handleError(event.nativeEvent)}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="disk"
+          onLoadStart={() => setIsLoading(true)}
+          onLoad={() => setIsLoading(false)}
+          onError={(event) => {
+            setIsLoading(false);
+            setHasError(true);
+            if (__DEV__) {
+              console.log('[AvatarImage] onError=', JSON.stringify(event));
+            }
+          }}
         />
       ) : (
         <Text style={styles.fallback}>{fallbackText.slice(0, 1).toUpperCase()}</Text>
       )}
-    </Wrapper>
+      {isLoading ? (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="small" color="#64748b" />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -105,6 +75,12 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(248, 250, 252, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fallback: {
     fontSize: typography.body,
