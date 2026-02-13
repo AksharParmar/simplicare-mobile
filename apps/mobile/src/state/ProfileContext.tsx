@@ -25,6 +25,8 @@ type ProfileView = Profile & {
 
 type ProfileContextValue = {
   profile: ProfileView | null;
+  isProfileLoading: boolean;
+  isAvatarLoading: boolean;
   loading: boolean;
   error: string | null;
   lastAvatarError: string | null;
@@ -45,9 +47,11 @@ type CropResolved = {
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { isGuest, user } = useAuth();
+  const userId = user?.id ?? null;
 
   const [profile, setProfile] = useState<ProfileView | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [isAvatarLoading, setIsAvatarLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastAvatarError, setLastAvatarError] = useState<string | null>(null);
 
@@ -56,7 +60,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const cropResolverRef = useRef<((value: CropResolved | null) => void) | null>(null);
 
   const refreshProfile = useCallback(async () => {
-    setLoading(true);
+    if (__DEV__) {
+      console.log('[ProfileContext] refreshProfile start', { userId });
+    }
+
+    setIsProfileLoading(true);
     setError(null);
     setLastAvatarError(null);
 
@@ -83,55 +91,74 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!user) {
+      if (!userId) {
         setProfile(null);
         return;
       }
 
-      const remoteProfile = await getOrCreateProfile(user.id);
+      const remoteProfile = await getOrCreateProfile(userId);
+      const remoteAvatarPath = remoteProfile.avatarPath;
+
+      // Keep existing avatar URL while refreshing profile fields.
+      setProfile((prev) => ({
+        ...remoteProfile,
+        avatarUrl:
+          prev?.avatarPath === remoteAvatarPath
+            ? (prev.avatarUrl ?? null)
+            : (prev?.avatarUrl ?? null),
+        avatarVersion: prev?.avatarVersion ?? 0,
+      }));
+
       let avatarUrl: string | null = null;
-      if (remoteProfile.avatarPath) {
+      if (remoteAvatarPath) {
+        setIsAvatarLoading(true);
         try {
-          avatarUrl = await getAvatarUrl(remoteProfile.avatarPath);
+          avatarUrl = await getAvatarUrl(remoteAvatarPath);
+          setLastAvatarError(null);
+          setProfile((prev) => {
+            if (!prev || prev.avatarPath !== remoteAvatarPath) {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              avatarUrl,
+            };
+          });
         } catch (avatarError) {
           const avatarMessage =
             avatarError instanceof Error
               ? `Failed to create avatar URL: ${avatarError.message}`
               : 'Failed to create avatar URL.';
           setLastAvatarError(avatarMessage);
+        } finally {
+          setIsAvatarLoading(false);
         }
+      } else {
+        setIsAvatarLoading(false);
+        setProfile((prev) => (prev ? { ...prev, avatarUrl: null } : prev));
       }
-
-      setProfile((prev) => ({
-        ...remoteProfile,
-        avatarUrl,
-        avatarVersion: prev?.avatarVersion ?? 0,
-      }));
     } catch (profileError) {
       setError(profileError instanceof Error ? profileError.message : 'Failed to load profile');
     } finally {
-      setLoading(false);
+      setIsProfileLoading(false);
+      if (__DEV__) {
+        console.log('[ProfileContext] refreshProfile end', { userId });
+      }
     }
-  }, [isGuest, user]);
+  }, [isGuest, userId]);
 
   useEffect(() => {
     void refreshProfile();
-  }, [refreshProfile]);
+  }, [refreshProfile, userId, isGuest]);
 
   const refreshAvatarUrl = useCallback(async () => {
-    setProfile((prev) => {
-      if (!prev?.avatarPath) {
-        return prev ?? null;
-      }
-
-      return { ...prev, avatarUrl: null };
-    });
-
     if (!profile?.avatarPath) {
       setLastAvatarError(null);
       return;
     }
 
+    setIsAvatarLoading(true);
     try {
       const nextUrl = await getAvatarUrl(profile.avatarPath, { forceRefresh: true });
       setLastAvatarError(null);
@@ -147,10 +174,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       });
     } catch (avatarError) {
       const message =
-        avatarError instanceof Error
-          ? `Failed to refresh avatar URL: ${avatarError.message}`
-          : 'Failed to refresh avatar URL.';
+          avatarError instanceof Error
+            ? `Failed to refresh avatar URL: ${avatarError.message}`
+            : 'Failed to refresh avatar URL.';
       setLastAvatarError(message);
+    } finally {
+      setIsAvatarLoading(false);
     }
   }, [profile?.avatarPath]);
 
@@ -273,7 +302,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       profile,
-      loading,
+      isProfileLoading,
+      isAvatarLoading,
+      loading: isProfileLoading,
       error,
       lastAvatarError,
       refreshProfile,
@@ -288,7 +319,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }),
     [
       profile,
-      loading,
+      isProfileLoading,
+      isAvatarLoading,
       error,
       lastAvatarError,
       refreshProfile,
